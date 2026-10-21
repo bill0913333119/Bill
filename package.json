@@ -1,0 +1,26 @@
+{
+  "name": "site-defect-manager",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "工地缺失改善管理系統：現場拍照標註、填表、自動產出 A4 PDF 並一鍵分享至 LINE",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "html2canvas-pro": "^2.5.0",
+    "idb-keyval": "^6.3.0",
+    "jspdf": "^4.2.1",
+    "vue": "^3.5.44"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "tailwindcss": "^4.3.3",
+    "vite": "^7.3.7",
+    "vitest": "^5.0.5"
+  }
+}
