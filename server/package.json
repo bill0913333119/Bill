@@ -1,0 +1,26 @@
+{
+  "name": "site-defect-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "工地缺失改善管理系統 API：PostgreSQL、照片儲存、LINE 整合、廠商改善回報",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node src/migrate.js",
+    "richmenu": "node scripts/setup-richmenu.js",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1154.0",
+    "express": "^5.3.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1",
+    "vitest": "^5.0.5"
+  }
+}

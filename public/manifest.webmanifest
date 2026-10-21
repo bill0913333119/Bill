@@ -1,0 +1,13 @@
+{
+  "name": "工地缺失改善管理系統",
+  "short_name": "工地缺失",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#f59e0b",
+  "lang": "zh-Hant-TW",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

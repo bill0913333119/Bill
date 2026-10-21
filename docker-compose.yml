@@ -1,0 +1,34 @@
+# 本機或單台主機部署：docker compose up -d → http://localhost:3000
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: defect
+      POSTGRES_PASSWORD: defect
+      POSTGRES_DB: defect
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U defect']
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://defect:defect@db:5432/defect
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+    volumes:
+      - uploads:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:
