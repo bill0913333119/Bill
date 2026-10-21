@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { CONTRACTORS } from '../data/presets.js'
 import { appendSentence, speechSupported, startDictation } from '../lib/speech.js'
 import { store } from '../store.js'
 import CoachTip from './CoachTip.vue'
@@ -23,7 +22,7 @@ onBeforeUnmount(() => stop?.())
 
 // 同工種廠商排前面
 const contractors = computed(() =>
-  [...CONTRACTORS].sort((a, b) => (b.tradeId === store.draft.tradeId) - (a.tradeId === store.draft.tradeId)),
+  [...store.presets.contractors].sort((a, b) => (b.tradeId === store.draft.tradeId) - (a.tradeId === store.draft.tradeId)),
 )
 </script>
 

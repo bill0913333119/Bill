@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@line/liff": "^2.31.2",
     "html2canvas-pro": "^2.5.0",
     "idb-keyval": "^6.3.0",
     "jspdf": "^4.2.1",

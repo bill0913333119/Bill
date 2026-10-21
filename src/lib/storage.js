@@ -4,6 +4,7 @@ import { get, set } from 'idb-keyval'
 const DRAFT_KEY = 'draft'
 const RECORDS_KEY = 'records'
 const SETTINGS_KEY = 'settings'
+const PRESETS_KEY = 'presets'
 
 const plain = (v) => JSON.parse(JSON.stringify(v))
 
@@ -29,3 +30,6 @@ export async function loadSettings() {
 }
 
 export const saveSettings = (settings) => set(SETTINGS_KEY, plain(settings))
+
+export const loadPresets = () => get(PRESETS_KEY)
+export const savePresets = (presets) => set(PRESETS_KEY, plain(presets))

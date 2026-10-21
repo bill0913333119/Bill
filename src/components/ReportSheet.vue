@@ -49,9 +49,19 @@ const photoH = computed(() => (r.value.photos.length === 1 ? 420 : r.value.photo
 
     <div class="section">改善回覆（由責任廠商填寫）</div>
     <div class="reply">
-      <div class="reply-box">改善說明：</div>
-      <div class="reply-box">改善後照片：</div>
+      <div class="reply-box">
+        改善說明：
+        <div v-if="r.replyNote" class="reply-text">{{ r.replyNote }}</div>
+        <div v-if="r.repliedAt" class="reply-date">回報時間：{{ formatDateTime(r.repliedAt) }}</div>
+      </div>
+      <div class="reply-box">
+        改善後照片：
+        <div v-if="r.afterPhotos?.length" class="after">
+          <img v-for="(p, i) in r.afterPhotos" :key="i" :src="p" />
+        </div>
+      </div>
     </div>
+    <div v-if="r.status === 'closed'" class="stamp">已結案<br /><small>{{ r.closedAt ? formatDateTime(r.closedAt) : '' }}</small></div>
 
     <table class="sign">
       <tr><th>開單工程師</th><th>工地主任</th><th>廠商簽認</th><th>複查確認</th></tr>
@@ -92,7 +102,14 @@ const photoH = computed(() => (r.value.photos.length === 1 ? 420 : r.value.photo
 .photos.n3 { grid-template-columns: 1fr 1fr 1fr; }
 .photos img { width: 100%; object-fit: cover; border: 1px solid #999; }
 .reply { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; flex: 1; }
-.reply-box { border: 1px solid #555; padding: 8px; color: #555; }
+.reply-box { border: 1px solid #555; padding: 8px; color: #555; display: flex; flex-direction: column; gap: 6px; }
+.reply-text { color: #111; white-space: pre-wrap; line-height: 1.6; }
+.reply-date { color: #555; font-size: 12px; }
+.after { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.after img { width: 100%; height: 110px; object-fit: cover; border: 1px solid #999; }
+.sheet { position: relative; }
+.stamp { position: absolute; right: 70px; bottom: 150px; transform: rotate(-12deg); border: 4px solid #dc2626; color: #dc2626; border-radius: 12px; padding: 6px 18px; font-size: 30px; font-weight: 900; text-align: center; line-height: 1.1; opacity: .85; }
+.stamp small { font-size: 12px; font-weight: 700; }
 .sign { margin-top: 14px; }
 .sign th { width: 25%; text-align: center; }
 .sign td { height: 64px; }

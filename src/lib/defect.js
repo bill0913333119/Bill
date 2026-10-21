@@ -27,8 +27,8 @@ export function recommendContractor(tradeId, contractors = CONTRACTORS) {
   return contractors.find((c) => c.tradeId === tradeId) ?? null
 }
 
-export function findTrade(tradeId) {
-  return TRADES.find((t) => t.id === tradeId) ?? null
+export function findTrade(tradeId, trades = TRADES) {
+  return trades.find((t) => t.id === tradeId) ?? null
 }
 
 /**

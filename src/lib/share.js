@@ -11,8 +11,12 @@ export function shareMessage(record, { tradeLabel, contractorName }) {
     `工種／項目：${tradeLabel}／${record.item}`,
     `責任廠商：${contractorName}`,
     `限期改善：${record.dueDate}`,
+    record.replyUrl ? `📷 改善回報：${record.replyUrl}` : '',
+    record.pdfUrl ? `📄 缺失單：${record.pdfUrl}` : '',
     '請於期限內完成改善並回傳改善後照片，謝謝！',
-  ].join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export const canShareFiles = (file) =>

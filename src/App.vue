@@ -1,12 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { validateStep } from './lib/defect.js'
-import { commitDraft, initStore, resetDraft, store } from './store.js'
+import { commitDraft, connect, initStore, resetDraft, store } from './store.js'
 import StepPhotos from './components/StepPhotos.vue'
 import StepClassify from './components/StepClassify.vue'
 import StepAssign from './components/StepAssign.vue'
 import DoneView from './components/DoneView.vue'
 import RecordList from './components/RecordList.vue'
+import ReplyView from './components/ReplyView.vue'
 
 const STEPS = [
   { n: 1, title: '拍照', icon: '📷', comp: StepPhotos },
@@ -14,13 +15,17 @@ const STEPS = [
   { n: 3, title: '說明指派', icon: '📝', comp: StepAssign },
 ]
 
-const view = ref('wizard') // wizard | done | records | settings
+// 路由：#/reply/<token> 為廠商回報頁（獨立、免登入）；#/records 由 LINE 選單直達紀錄
+const replyToken = location.hash.match(/^#\/reply\/([\w-]+)/)?.[1] ?? ''
+const view = ref(location.hash === '#/records' ? 'records' : 'wizard') // wizard | done | records | settings
 const doneRecord = ref(null)
 const missing = ref([])
 const current = computed(() => STEPS[store.step - 1])
-const openCount = computed(() => store.records.filter((r) => r.status === 'open').length)
+const openCount = computed(() => store.records.filter((r) => r.status !== 'closed').length)
 
-onMounted(initStore)
+onMounted(() => {
+  if (!replyToken) initStore()
+})
 
 function next() {
   missing.value = validateStep(store.step, store.draft)
@@ -52,13 +57,20 @@ function openRecord(r) {
   view.value = 'done'
 }
 
+function saveSettings() {
+  store.draft.projectName ||= store.settings.projectName
+  view.value = 'wizard'
+  connect()
+}
+
 function discardDraft() {
   if (confirm('確定要清除目前填寫的內容？')) resetDraft()
 }
 </script>
 
 <template>
-  <div v-if="store.ready" class="mx-auto flex min-h-dvh max-w-xl flex-col">
+  <ReplyView v-if="replyToken" :token="replyToken" />
+  <div v-else-if="store.ready" class="mx-auto flex min-h-dvh max-w-xl flex-col">
     <header class="sticky top-0 z-10 bg-slate-900 px-4 pb-3 pt-[max(env(safe-area-inset-top),12px)] text-white">
       <div class="flex items-center justify-between">
         <div class="min-w-0">
@@ -105,7 +117,15 @@ function discardDraft() {
           <label class="label">開單工程師姓名</label>
           <input v-model="store.settings.inspector" class="input" placeholder="會印在 PDF 上" />
         </div>
-        <button class="btn btn-primary w-full" @click="(store.draft.projectName ||= store.settings.projectName), (view = 'wizard')">完成</button>
+        <div v-if="store.server.authRequired || store.settings.apiToken">
+          <label class="label">雲端連線金鑰</label>
+          <input v-model.trim="store.settings.apiToken" type="password" class="input" placeholder="向系統管理員索取" />
+        </div>
+        <p class="text-sm text-slate-500">
+          {{ store.server.available ? '☁️ 已連線雲端，資料會自動同步' : '📴 目前為離線模式，資料存在本機，連線後自動上傳' }}
+          {{ store.server.error ? `（${store.server.error}）` : '' }}
+        </p>
+        <button class="btn btn-primary w-full" @click="saveSettings">完成</button>
       </section>
     </main>
 

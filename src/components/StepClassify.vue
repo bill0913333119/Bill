@@ -1,18 +1,18 @@
 <script setup>
 import { computed } from 'vue'
-import { BUILDINGS, FLOORS, SEVERITIES, TRADES } from '../data/presets.js'
+import { BUILDINGS, FLOORS, SEVERITIES } from '../data/presets.js'
 import { findTrade, recommendContractor } from '../lib/defect.js'
 import { store } from '../store.js'
 import CoachTip from './CoachTip.vue'
 
-const trade = computed(() => findTrade(store.draft.tradeId))
+const trade = computed(() => findTrade(store.draft.tradeId, store.presets.trades))
 
 function pickTrade(id) {
   const draft = store.draft
   if (draft.tradeId !== id) draft.item = ''
   draft.tradeId = id
   // 工種聯動：自動帶入對應分包商
-  draft.contractorId = recommendContractor(id)?.id ?? ''
+  draft.contractorId = recommendContractor(id, store.presets.contractors)?.id ?? ''
 }
 const toggleBuilding = (b) => (store.draft.building = store.draft.building === b ? '' : b)
 </script>
@@ -44,7 +44,7 @@ const toggleBuilding = (b) => (store.draft.building = store.draft.building === b
       <label class="label">缺失工種 <span class="text-red-500">*</span></label>
       <div class="grid grid-cols-3 gap-3">
         <button
-          v-for="t in TRADES"
+          v-for="t in store.presets.trades"
           :key="t.id"
           class="chip flex min-h-24 flex-col items-center justify-center gap-1"
           :class="{ 'chip-on': store.draft.tradeId === t.id }"

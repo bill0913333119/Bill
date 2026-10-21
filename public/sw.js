@@ -1,5 +1,5 @@
 // 簡易離線快取：App Shell 採 network-first，失敗時回退快取，確保工地收訊不佳仍可開啟。
-const CACHE = 'defect-app-v1'
+const CACHE = 'defect-app-v2'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest', './icon.svg'])))
@@ -16,6 +16,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event
   if (request.method !== 'GET' || !request.url.startsWith(self.location.origin)) return
+  // API 與上傳檔不快取，避免顯示過期的缺失狀態
+  const { pathname } = new URL(request.url)
+  if (pathname.startsWith('/api/') || pathname.startsWith('/files/')) return
   event.respondWith(
     fetch(request)
       .then((res) => {
