@@ -1,4 +1,8 @@
--- 預設工種、常見項目與分包商（已存在則略過）
+-- 預設案場、工種、常見項目與分包商（已存在則略過）
+insert into projects (name) values
+  ('六張犁')
+on conflict (name) do nothing;
+
 insert into trades (id, label, icon, sort) values
   ('waterproof', '防水', '💧', 1),
   ('masonry',    '泥作', '🧱', 2),
