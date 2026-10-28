@@ -5,9 +5,10 @@ export const config = {
   port: Number(env.PORT ?? 3000),
   databaseUrl: env.DATABASE_URL ?? 'postgres://defect:defect@localhost:5432/defect',
   // 對外網址，用於產生廠商回報連結與 LINE 卡片連結，例：https://defect.example.com
-  publicUrl: (env.PUBLIC_URL ?? `http://localhost:${env.PORT ?? 3000}`).replace(/\/$/, ''),
+  // 未設定時採用 Render 自動提供的 RENDER_EXTERNAL_URL（https://<服務名稱>.onrender.com）
+  publicUrl: (env.PUBLIC_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${env.PORT ?? 3000}`).replace(/\/$/, ''),
   // 設定後，工程師端 API 需帶 Authorization: Bearer <APP_TOKEN>
-  appToken: env.APP_TOKEN ?? '',
+  appToken: env.APP_TOKEN || '',
   uploadDir: env.UPLOAD_DIR ?? new URL('../uploads/', import.meta.url).pathname,
   s3: env.S3_BUCKET
     ? {

@@ -46,7 +46,7 @@ DATABASE_URL=postgres://user:pass@localhost:5432/defect npm run dev     # :3000
 npm install && npm run dev                                              # :5173
 ```
 
-正式部署：`npm run build` 後由後端一併提供前端（`dist/`），或直接 `docker compose up -d`。
+正式部署：**Render 一鍵部署請見 [`docs/Render部署.md`](docs/Render部署.md)**；或 `npm run build` 後由後端一併提供前端（`dist/`），或 `docker compose up -d`。
 **必須使用 HTTPS**，相機、語音、分享與 LIFF 才能運作。環境變數見 `.env.example`。
 
 ### 測試

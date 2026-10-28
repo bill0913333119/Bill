@@ -1,0 +1,49 @@
+# Render Blueprint：一鍵建立網站（前端＋API）與 PostgreSQL 資料庫
+# 用法：Render Dashboard → New → Blueprint → 選這個 GitHub repo
+# 說明文件：docs/Render部署.md
+
+services:
+  - type: web
+    name: site-defect
+    runtime: node
+    region: singapore          # 離台灣最近的機房
+    plan: starter              # 需要付費方案才能掛載磁碟保存照片；改用 R2 時可降為 free
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build && npm ci --prefix server --omit=dev
+    startCommand: node server/src/index.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: uploads
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: site-defect-db
+          property: connectionString
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      # 工程師 App 連線金鑰：Render 自動產生，到 Environment 頁複製後在 App「設定」輸入
+      - key: APP_TOKEN
+        generateValue: true
+      # 綁定自有網域時再填，例：https://defect.example.com；留空則使用 onrender.com 網址
+      - key: PUBLIC_URL
+        sync: false
+      # LINE 官方帳號（可之後再填）
+      - key: LINE_CHANNEL_SECRET
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: LIFF_ID
+        sync: false
+
+databases:
+  - name: site-defect-db
+    region: singapore
+    plan: basic-256mb
+    databaseName: defect
+    user: defect
+    postgresMajorVersion: "16"
