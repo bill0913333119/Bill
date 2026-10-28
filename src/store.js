@@ -1,5 +1,5 @@
 import { reactive, watch } from 'vue'
-import { BUILDINGS, CONTRACTORS, FLOORS, LEGACY_FLOORS, TRADES } from './data/presets.js'
+import { BUILDINGS, CONTRACTORS, FLOORS, LEGACY_FLOORS, PROJECTS, TRADES } from './data/presets.js'
 import * as api from './lib/api.js'
 import { createDraft, findTrade, nextReportNo, recommendContractor, toDateInput } from './lib/defect.js'
 import { initLiff } from './lib/liff.js'
@@ -21,7 +21,7 @@ export const store = reactive({
     floors: [...FLOORS],
     reminderHour: 17,
   },
-  presets: { trades: TRADES, contractors: CONTRACTORS },
+  presets: { trades: TRADES, contractors: CONTRACTORS, projects: PROJECTS },
   server: { available: false, authRequired: false, liffId: '', error: '' },
   draft: createDraft(),
   step: 1,
@@ -53,7 +53,7 @@ export async function initStore() {
   if (JSON.stringify(store.settings.floors) === JSON.stringify(LEGACY_FLOORS)) store.settings.floors = [...FLOORS]
   store.records = records
   store.logs = logs
-  if (presets) store.presets = presets
+  if (presets) store.presets = { projects: PROJECTS, ...presets }
   if (draft) {
     const { _step, ...rest } = draft
     store.draft = { ...createDraft(store.settings.projectName), ...rest }

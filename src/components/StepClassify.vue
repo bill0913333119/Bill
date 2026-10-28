@@ -25,7 +25,10 @@ const toggleBuilding = (b) => (store.draft.building = store.draft.building === b
 
     <div>
       <label class="label">工程專案</label>
-      <input v-model="store.draft.projectName" class="input" placeholder="例：信義區住宅新建工程" />
+      <input v-model="store.draft.projectName" class="input" list="project-options" placeholder="例：六張犁" />
+      <datalist id="project-options">
+        <option v-for="p in store.presets.projects" :key="p" :value="p" />
+      </datalist>
     </div>
 
     <div>

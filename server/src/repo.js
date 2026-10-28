@@ -49,14 +49,16 @@ export function toPublicDto(dto) {
 }
 
 export async function getPresets(db) {
-  const [{ rows: trades }, { rows: items }, { rows: contractors }] = await Promise.all([
+  const [{ rows: trades }, { rows: items }, { rows: contractors }, { rows: projects }] = await Promise.all([
     db.query('select id, label, icon from trades order by sort, id'),
     db.query('select trade_id, label from trade_items order by trade_id, sort, id'),
     db.query('select id, name, trade_id as "tradeId", coalesce(phone, \'\') as phone from contractors where active order by name'),
+    db.query('select name from projects order by created_at, name'),
   ])
   return {
     trades: trades.map((t) => ({ ...t, items: items.filter((i) => i.trade_id === t.id).map((i) => i.label) })),
     contractors,
+    projects: projects.map((p) => p.name),
   }
 }
 

@@ -144,7 +144,10 @@ const navBtn = (v) => (view.value === v ? 'bg-amber-100 text-amber-900' : 'text-
       <section v-else-if="view === 'settings'" class="space-y-5">
         <div>
           <label class="label" for="proj">預設工程專案</label>
-          <input id="proj" v-model="store.settings.projectName" class="input" placeholder="例：信義區住宅新建工程" />
+          <input id="proj" v-model="store.settings.projectName" class="input" list="settings-project-options" placeholder="例：六張犁" />
+          <datalist id="settings-project-options">
+            <option v-for="p in store.presets.projects" :key="p" :value="p" />
+          </datalist>
         </div>
         <div>
           <label class="label" for="insp">開單工程師姓名</label>
