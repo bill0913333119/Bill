@@ -45,3 +45,7 @@ export async function dataUrlToBlob(dataUrl) {
 export const getReply = (t) => request('GET', `/api/reply/${t}`)
 export const uploadReplyPhoto = (t, blob) => uploadBlob(blob, `/api/reply/${t}/photos`)
 export const submitReply = (t, body) => request('POST', `/api/reply/${t}`, body)
+
+// 每日工作日誌
+export const putLog = (id, body) => request('PUT', `/api/logs/${encodeURIComponent(id)}`, body)
+export const listLogs = (query) => request('GET', `/api/logs?${new URLSearchParams(query)}`)

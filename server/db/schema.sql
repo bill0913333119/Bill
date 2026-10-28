@@ -77,3 +77,27 @@ create table if not exists defect_logs (      -- 建立、回報、複查、結�
   note        text,
   created_at  timestamptz not null default now()
 );
+
+-- 戶別／編號（口述「三零一室」等）
+alter table defects add column if not exists unit text;
+
+-- 每日工作日誌：每位工程師每天每專案一份；送出後才可簽退下班
+create table if not exists daily_logs (
+  id              text primary key,             -- '<日期>_<工程師>'，離線重送冪等
+  log_date        date not null,
+  project_id      uuid references projects(id),
+  engineer        text not null,
+  weather         text,
+  work_content    text,
+  manpower        text,
+  issues          text,
+  tomorrow_plan   text,
+  defects_opened  int not null default 0,
+  defects_closed  int not null default 0,
+  submitted_at    timestamptz,
+  clock_out_at    timestamptz,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+create index if not exists daily_logs_date_idx on daily_logs (log_date, project_id);

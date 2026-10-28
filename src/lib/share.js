@@ -1,19 +1,26 @@
+import { locationOf } from './defect.js'
+
 export function pdfFile(blob, reportNo) {
   return new File([blob], `${reportNo}_缺失改善單.pdf`, { type: 'application/pdf' })
 }
 
+/**
+ * LINE 隨附文字：欄位與 PDF 通知單一致，PDF 內含照片，文字則讓群組不開檔也能看到重點。
+ */
 export function shareMessage(record, { tradeLabel, contractorName }) {
   const sev = record.severity === 'major' ? '🔴【重大缺失】' : '🟢【一般缺失】'
   return [
-    `${sev} ${record.reportNo}`,
+    `${sev} 工程缺失改善通知單 ${record.reportNo}`,
     `專案：${record.projectName}`,
-    `位置：${[record.building, record.floor].filter(Boolean).join(' ')}`,
+    `位置：${locationOf(record)}`,
     `工種／項目：${tradeLabel}／${record.item}`,
+    record.description ? `說明：${record.description}` : '',
     `責任廠商：${contractorName}`,
     `限期改善：${record.dueDate}`,
-    record.replyUrl ? `📷 改善回報：${record.replyUrl}` : '',
-    record.pdfUrl ? `📄 缺失單：${record.pdfUrl}` : '',
-    '請於期限內完成改善並回傳改善後照片，謝謝！',
+    record.inspector ? `開單人員：${record.inspector}` : '',
+    `（缺失照片與改善對照詳見附件 PDF，共 ${record.photos.length} 張）`,
+    record.replyUrl ? `📷 回報改善：${record.replyUrl}` : '',
+    record.pdfUrl ? `📄 下載：${record.pdfUrl}` : '',
   ]
     .filter(Boolean)
     .join('\n')

@@ -127,6 +127,44 @@ describe.skipIf(!DB_URL)('API', () => {
     expect(rows.map((r) => r.action)).toEqual(['created', 'replied', 'rejected', 'replied', 'closed'])
   })
 
+  it('stores unit number on defects', async () => {
+    const { body } = await request(app).put(`/api/defects/${crypto.randomUUID()}`).set(auth).send(defect({ unit: '301', building: 'A棟' })).expect(200)
+    expect(body.unit).toBe('301')
+    expect(body.building).toBe('A棟')
+  })
+
+  it('keeps daily work logs idempotent and reports who has not submitted', async () => {
+    const day = '2026-10-28'
+    const log = {
+      date: day, projectName: '日誌案', engineer: '王大明', weather: 'rain', workContent: '3F 泥作', manpower: '12',
+      defectsOpened: 2, defectsClosed: 1,
+    }
+    await request(app).put('/api/logs/wrong-id').set(auth).send(log).expect(400)
+    // 先有一筆缺失，王大明與李小華都算現場工程師
+    for (const inspector of ['王大明', '李小華']) {
+      await request(app).put(`/api/defects/${crypto.randomUUID()}`).set(auth)
+        .send(defect({ projectName: '日誌案', inspector, reportNo: '', createdAt: `${day}T02:00:00Z` })).expect(200)
+    }
+    const id = `${day}_王大明`
+    await request(app).put(`/api/logs/${encodeURIComponent(id)}`).set(auth).send(log).expect(200)
+    let missing = (await request(app).get(`/api/logs/missing?date=${day}&project=日誌案`).set(auth).expect(200)).body
+    expect(missing.map((m) => m.engineer).sort()).toEqual(['李小華', '王大明']) // 王大明僅暫存，尚未送出
+
+    const submitted = (await request(app).put(`/api/logs/${encodeURIComponent(id)}`).set(auth)
+      .send({ ...log, submittedAt: '2026-10-28T09:00:00Z' }).expect(200)).body
+    expect(submitted.submittedAt).toBeTruthy()
+    // 舊資料重送不得清掉已送出的時間
+    const again = (await request(app).put(`/api/logs/${encodeURIComponent(id)}`).set(auth).send({ ...log, manpower: '15' }).expect(200)).body
+    expect(again.submittedAt).toBe(submitted.submittedAt)
+    expect(again.manpower).toBe('15')
+
+    missing = (await request(app).get(`/api/logs/missing?date=${day}&project=日誌案`).set(auth).expect(200)).body
+    expect(missing.map((m) => m.engineer)).toEqual(['李小華'])
+    const list = (await request(app).get(`/api/logs?date=${day}&project=日誌案`).set(auth).expect(200)).body
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatchObject({ weather: 'rain', defectsOpened: 2 })
+  })
+
   it('verifies LINE webhook signatures and binds groups', async () => {
     const body = JSON.stringify({
       events: [{ type: 'message', replyToken: 'r1', source: { type: 'group', groupId: 'G9' }, message: { type: 'text', text: '綁定 大安案' } }],

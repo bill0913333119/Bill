@@ -30,7 +30,8 @@ const button = (label, uri, style = 'link') => ({
  */
 export function defectFlex(d, opt = {}) {
   const sev = SEVERITY[d.severity] ?? SEVERITY.normal
-  const location = [d.building, d.floor].filter(Boolean).join(' ')
+  const unit = d.unit && /^\d+$/.test(d.unit) ? `${d.unit}戶` : d.unit
+  const location = [d.building, d.floor, unit].filter(Boolean).join(' ')
   const title = opt.title ?? '工地缺失改善通知'
   const footer = [
     d.replyUrl && button('📷 回報改善', d.replyUrl, 'primary'),

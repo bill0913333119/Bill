@@ -132,6 +132,26 @@ export function createApp({ pool, storage, line, config }) {
     res.json(d)
   })
 
+  // ---------- 每日工作日誌 ----------
+  app.put('/api/logs/:id', auth, async (req, res) => {
+    const b = req.body
+    requireFields(b, ['projectName', 'engineer', 'date'])
+    if (!DATE_RE.test(b.date)) throw new HttpError(400, 'date 格式需為 YYYY-MM-DD')
+    if (req.params.id !== `${b.date}_${b.engineer.trim()}`) throw new HttpError(400, 'id 需為「日期_工程師」')
+    res.json(repo.logToDto(await repo.upsertLog(pool, req.params.id, b)))
+  })
+
+  app.get('/api/logs', auth, async (req, res) => {
+    res.json((await repo.listLogs(pool, req.query)).map(repo.logToDto))
+  })
+
+  // 管理者查詢：今天誰還沒交日誌（可由排程或 LINE 提醒使用）
+  app.get('/api/logs/missing', auth, async (req, res) => {
+    const date = req.query.date
+    if (!DATE_RE.test(date ?? '')) throw new HttpError(400, 'date 格式需為 YYYY-MM-DD')
+    res.json(await repo.missingLogs(pool, date, req.query.project))
+  })
+
   // ---------- 廠商回報（以 reply token 存取，免登入） ----------
   async function byToken(token) {
     const row = await repo.findDefect(pool, 'd.reply_token', token)

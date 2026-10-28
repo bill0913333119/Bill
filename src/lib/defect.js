@@ -51,6 +51,7 @@ export function createDraft(projectName = '') {
     projectName,
     building: '',
     floor: '',
+    unit: '',
     tradeId: '',
     item: '',
     description: '',
@@ -78,4 +79,10 @@ export function validateStep(step, d) {
     if (!d.dueDate) missing.push('限期改善日')
   }
   return missing
+}
+
+/** 位置顯示：棟別 樓層 戶別，例「A棟 3F 301戶」。 */
+export function locationOf(r) {
+  const unit = r.unit ? (/^\d+$/.test(r.unit) ? `${r.unit}戶` : r.unit) : ''
+  return [r.building, r.floor, unit].filter(Boolean).join(' ')
 }

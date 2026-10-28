@@ -1,19 +1,33 @@
 import { reactive, watch } from 'vue'
-import { CONTRACTORS, TRADES } from './data/presets.js'
+import { BUILDINGS, CONTRACTORS, FLOORS, LEGACY_FLOORS, TRADES } from './data/presets.js'
 import * as api from './lib/api.js'
-import { createDraft, findTrade, nextReportNo } from './lib/defect.js'
+import { createDraft, findTrade, nextReportNo, recommendContractor, toDateInput } from './lib/defect.js'
 import { initLiff } from './lib/liff.js'
+import { sortFloors } from './lib/floors.js'
 import * as db from './lib/storage.js'
+import { appendSentence } from './lib/speech.js'
+import { parseSpeech } from './lib/voiceParse.js'
+import { createLog, dayDefectStats } from './lib/worklog.js'
 
 // 全域狀態：設定、目前草稿、已建立紀錄。草稿任何變動 300ms 內自動寫入 IndexedDB。
 export const store = reactive({
   ready: false,
-  settings: { projectName: '', inspector: '', apiToken: '' },
+  settings: {
+    projectName: '',
+    inspector: '',
+    apiToken: '',
+    signature: '', // 儲存後的手寫簽名（PNG），自動套用於所有通知單
+    buildings: [...BUILDINGS],
+    floors: [...FLOORS],
+    reminderHour: 17,
+  },
   presets: { trades: TRADES, contractors: CONTRACTORS },
   server: { available: false, authRequired: false, liffId: '', error: '' },
   draft: createDraft(),
   step: 1,
   records: [],
+  logs: [],
+  online: typeof navigator === 'undefined' ? true : navigator.onLine,
   savedAt: null,
   syncing: false,
 })
@@ -28,14 +42,17 @@ function scheduleSave() {
 }
 
 export async function initStore() {
-  const [settings, draft, records, presets] = await Promise.all([
+  const [settings, draft, records, presets, logs] = await Promise.all([
     db.loadSettings(),
     db.loadDraft(),
     db.loadRecords(),
     db.loadPresets(),
+    db.loadLogs(),
   ])
   store.settings = { ...store.settings, ...settings }
+  if (JSON.stringify(store.settings.floors) === JSON.stringify(LEGACY_FLOORS)) store.settings.floors = [...FLOORS]
   store.records = records
+  store.logs = logs
   if (presets) store.presets = presets
   if (draft) {
     const { _step, ...rest } = draft
@@ -55,7 +72,11 @@ export async function initStore() {
     },
     { deep: true },
   )
-  window.addEventListener('online', () => connect())
+  window.addEventListener('online', () => {
+    store.online = true
+    connect()
+  })
+  window.addEventListener('offline', () => (store.online = false))
   connect()
 }
 
@@ -105,6 +126,7 @@ export async function syncPending() {
   store.syncing = true
   try {
     for (const r of store.records.filter((r) => !r.synced)) await syncRecord(r)
+    for (const l of store.logs.filter((l) => l.submittedAt && !l.synced)) await syncLog(l)
   } finally {
     store.syncing = false
   }
@@ -162,4 +184,110 @@ export const contractorOf = (id) => store.presets.contractors.find((c) => c.id =
 export const tradeLabelOf = (id) => {
   const t = findTrade(id, store.presets.trades)
   return t ? `${t.icon} ${t.label}` : ''
+}
+
+export const pendingCount = () =>
+  store.records.filter((r) => !r.synced).length + store.logs.filter((l) => l.submittedAt && !l.synced).length
+
+// ---------- 棟別／樓層清單編輯 ----------
+export function setBuildings(list) {
+  store.settings.buildings = [...new Set(list.map((b) => b.trim()).filter(Boolean))]
+}
+export function setFloors(list) {
+  store.settings.floors = sortFloors(list.map((f) => f.trim()).filter(Boolean))
+}
+
+/**
+ * 套用口述結果到草稿：棟別、樓層、戶別、工種與缺失項目；其餘文字接在詳細說明後。
+ * 回傳摘要字串供畫面顯示。
+ */
+export function applyVoice(text) {
+  const d = store.draft
+  const p = parseSpeech(text, {
+    buildings: store.settings.buildings,
+    floors: store.settings.floors,
+    trades: store.presets.trades,
+  })
+  const parts = []
+  if (p.building) {
+    d.building = p.building
+    if (!store.settings.buildings.includes(p.building)) store.settings.buildings.push(p.building)
+    parts.push(p.building)
+  }
+  if (p.floor) {
+    d.floor = p.floor
+    if (p.newFloor) setFloors([...store.settings.floors, p.floor])
+    parts.push(p.floor)
+  }
+  if (p.unit) {
+    d.unit = p.unit
+    parts.push(`${p.unit}戶`)
+  }
+  if (p.tradeId) {
+    d.tradeId = p.tradeId
+    d.item = p.item
+    d.contractorId = recommendContractor(p.tradeId, store.presets.contractors)?.id ?? d.contractorId
+    parts.push(p.item)
+  }
+  if (p.rest) {
+    d.description = appendSentence(d.description, p.rest)
+    parts.push('說明')
+  }
+  return parts.join('、')
+}
+
+// ---------- 每日工作日誌 ----------
+export const today = () => toDateInput(new Date())
+
+export function currentLog(date = today()) {
+  const engineer = store.settings.inspector.trim()
+  return store.logs.find((l) => l.date === date && l.engineer === engineer) ?? null
+}
+
+/** 取得（或建立草稿）今日日誌，並帶入當日缺失統計。 */
+export function ensureTodayLog() {
+  const existing = currentLog()
+  if (existing) return existing
+  const projectName = store.draft.projectName || store.settings.projectName
+  const stats = dayDefectStats(store.records, today(), projectName)
+  return {
+    ...createLog({ projectName, engineer: store.settings.inspector.trim() }),
+    defectsOpened: stats.opened,
+    defectsClosed: stats.closed,
+  }
+}
+
+async function persistLog(log) {
+  store.logs = await db.upsertLog(log)
+  return store.logs.find((l) => l.id === log.id)
+}
+
+export async function syncLog(log) {
+  const saved = await api.putLog(log.id, log)
+  return persistLog({ ...log, ...saved, synced: true })
+}
+
+export async function saveLog(log, { submit = false } = {}) {
+  const next = { ...log, synced: false }
+  const stats = dayDefectStats(store.records, next.date, next.projectName)
+  next.defectsOpened = stats.opened
+  next.defectsClosed = stats.closed
+  if (submit && !next.submittedAt) next.submittedAt = new Date().toISOString()
+  let saved = await persistLog(next)
+  if (submit && store.server.available) {
+    try {
+      saved = await syncLog(saved)
+    } catch (e) {
+      console.warn('日誌同步失敗，稍後重試', e)
+    }
+  }
+  return saved
+}
+
+/** 下班簽退：日誌已送出才允許。 */
+export async function clockOut(log) {
+  if (!log?.submittedAt) throw new Error('請先完成今日工作日誌')
+  const saved = await persistLog({ ...log, clockOutAt: new Date().toISOString(), synced: false })
+  if (store.server.available) await syncLog(saved).catch((e) => console.warn(e))
+  return currentLog(log.date)
 }
