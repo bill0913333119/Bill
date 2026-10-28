@@ -1,9 +1,10 @@
 <script setup>
-import { computed } from 'vue'
-import { BUILDINGS, FLOORS, SEVERITIES } from '../data/presets.js'
+import { computed, ref } from 'vue'
+import { SEVERITIES } from '../data/presets.js'
 import { findTrade, recommendContractor } from '../lib/defect.js'
-import { store } from '../store.js'
+import { setBuildings, setFloors, store } from '../store.js'
 import CoachTip from './CoachTip.vue'
+import ListEditor from './ListEditor.vue'
 
 const trade = computed(() => findTrade(store.draft.tradeId, store.presets.trades))
 
@@ -14,6 +15,7 @@ function pickTrade(id) {
   // 工種聯動：自動帶入對應分包商
   draft.contractorId = recommendContractor(id, store.presets.contractors)?.id ?? ''
 }
+const editing = ref('') // '' | 'buildings' | 'floors'
 const toggleBuilding = (b) => (store.draft.building = store.draft.building === b ? '' : b)
 </script>
 
@@ -27,17 +29,28 @@ const toggleBuilding = (b) => (store.draft.building = store.draft.building === b
     </div>
 
     <div>
-      <label class="label">棟別（選填）</label>
+      <div class="mb-2 flex items-center justify-between">
+        <label class="label !mb-0">棟別（選填）</label>
+        <button class="rounded-lg bg-slate-200 px-3 py-1 text-sm font-bold text-slate-700" @click="editing = 'buildings'">✏️ 編輯</button>
+      </div>
       <div class="grid grid-cols-4 gap-2">
-        <button v-for="b in BUILDINGS" :key="b" class="chip" :class="{ 'chip-on': store.draft.building === b }" @click="toggleBuilding(b)">{{ b }}</button>
+        <button v-for="b in store.settings.buildings" :key="b" class="chip px-1" :class="{ 'chip-on': store.draft.building === b }" @click="toggleBuilding(b)">{{ b }}</button>
       </div>
     </div>
 
     <div>
-      <label class="label">樓層 <span class="text-red-500">*</span></label>
-      <div class="grid grid-cols-4 gap-2 sm:grid-cols-6">
-        <button v-for="f in FLOORS" :key="f" class="chip" :class="{ 'chip-on': store.draft.floor === f }" @click="store.draft.floor = f">{{ f }}</button>
+      <div class="mb-2 flex items-center justify-between">
+        <label class="label !mb-0">樓層 <span class="text-red-500">*</span></label>
+        <button class="rounded-lg bg-slate-200 px-3 py-1 text-sm font-bold text-slate-700" @click="editing = 'floors'">✏️ 編輯</button>
       </div>
+      <div class="grid grid-cols-4 gap-2 sm:grid-cols-6">
+        <button v-for="f in store.settings.floors" :key="f" class="chip px-1" :class="{ 'chip-on': store.draft.floor === f }" @click="store.draft.floor = f">{{ f }}</button>
+      </div>
+    </div>
+
+    <div>
+      <label class="label">戶別／編號（選填）</label>
+      <input v-model.trim="store.draft.unit" class="input" placeholder="例：301、A3、東側走廊" />
     </div>
 
     <div>
@@ -77,5 +90,23 @@ const toggleBuilding = (b) => (store.draft.building = store.draft.building === b
         </button>
       </div>
     </div>
+
+    <ListEditor
+      v-if="editing === 'buildings'"
+      title="棟別"
+      :items="store.settings.buildings"
+      placeholder="輸入棟別，例：D棟（可用逗號一次多個）"
+      @save="(l) => (setBuildings(l), (editing = ''))"
+      @close="editing = ''"
+    />
+    <ListEditor
+      v-if="editing === 'floors'"
+      title="樓層"
+      :items="store.settings.floors"
+      placeholder="輸入樓層，例：16F 或 16F~20F"
+      range-hint
+      @save="(l) => (setFloors(l), (editing = ''))"
+      @close="editing = ''"
+    />
   </section>
 </template>

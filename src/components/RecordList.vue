@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { toDateInput } from '../lib/defect.js'
+import { locationOf, toDateInput } from '../lib/defect.js'
 import { connect, contractorOf, store, tradeLabelOf } from '../store.js'
 
 const emit = defineEmits(['open'])
@@ -65,7 +65,7 @@ async function refresh() {
             <span v-if="overdue(r)" class="font-bold text-red-600">已逾期</span>
             <span v-if="!r.synced" title="尚未同步">📴</span>
           </div>
-          <div class="truncate text-lg font-bold">{{ [r.building, r.floor].filter(Boolean).join(' ') }}｜{{ r.item }}</div>
+          <div class="truncate text-lg font-bold">{{ locationOf(r) }}｜{{ r.item }}</div>
           <div class="truncate text-sm text-slate-600">{{ tradeLabelOf(r.tradeId) }}・{{ contractorOf(r.contractorId)?.name }}・期限 {{ r.dueDate }}</div>
         </div>
         <span class="shrink-0 self-center rounded-xl px-2 py-1 text-sm font-bold" :class="STATUS[r.status]?.cls">{{ STATUS[r.status]?.text }}</span>

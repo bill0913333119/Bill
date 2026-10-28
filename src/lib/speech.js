@@ -6,15 +6,19 @@ export const speechSupported = Boolean(Recognition)
 /**
  * 開始收音；onText 收到最終辨識結果，onEnd 於結束時呼叫。回傳 stop()。
  */
-export function startDictation({ onText, onEnd, onError }) {
+export function startDictation({ onText, onInterim, onEnd, onError }) {
   const rec = new Recognition()
   rec.lang = 'zh-TW'
   rec.continuous = true
-  rec.interimResults = false
+  rec.interimResults = Boolean(onInterim)
   rec.onresult = (e) => {
+    let interim = ''
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) onText(e.results[i][0].transcript.trim())
+      const t = e.results[i][0].transcript
+      if (e.results[i].isFinal) onText(t.trim())
+      else interim += t
     }
+    onInterim?.(interim)
   }
   rec.onerror = (e) => onError?.(e.error)
   rec.onend = () => onEnd?.()

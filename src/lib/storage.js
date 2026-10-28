@@ -5,6 +5,7 @@ const DRAFT_KEY = 'draft'
 const RECORDS_KEY = 'records'
 const SETTINGS_KEY = 'settings'
 const PRESETS_KEY = 'presets'
+const LOGS_KEY = 'worklogs'
 
 const plain = (v) => JSON.parse(JSON.stringify(v))
 
@@ -33,3 +34,16 @@ export const saveSettings = (settings) => set(SETTINGS_KEY, plain(settings))
 
 export const loadPresets = () => get(PRESETS_KEY)
 export const savePresets = (presets) => set(PRESETS_KEY, plain(presets))
+
+export async function loadLogs() {
+  return (await get(LOGS_KEY)) ?? []
+}
+
+export async function upsertLog(log) {
+  const logs = await loadLogs()
+  const i = logs.findIndex((l) => l.id === log.id)
+  if (i >= 0) logs[i] = plain(log)
+  else logs.unshift(plain(log))
+  await set(LOGS_KEY, logs)
+  return logs
+}
