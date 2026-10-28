@@ -1,5 +1,5 @@
 import { reactive, watch } from 'vue'
-import { BUILDINGS, CONTRACTORS, FLOORS, TRADES } from './data/presets.js'
+import { BUILDINGS, CONTRACTORS, FLOORS, LEGACY_FLOORS, TRADES } from './data/presets.js'
 import * as api from './lib/api.js'
 import { createDraft, findTrade, nextReportNo, recommendContractor, toDateInput } from './lib/defect.js'
 import { initLiff } from './lib/liff.js'
@@ -50,6 +50,7 @@ export async function initStore() {
     db.loadLogs(),
   ])
   store.settings = { ...store.settings, ...settings }
+  if (JSON.stringify(store.settings.floors) === JSON.stringify(LEGACY_FLOORS)) store.settings.floors = [...FLOORS]
   store.records = records
   store.logs = logs
   if (presets) store.presets = presets

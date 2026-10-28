@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TRADES } from '../src/data/presets.js'
+import { FLOORS, TRADES } from '../src/data/presets.js'
 import { addUnique, expandFloorInput, sortFloors } from '../src/lib/floors.js'
 import { cnToNumber, parseSpeech } from '../src/lib/voiceParse.js'
 import { canClockOut, createLog, dayDefectStats, needsReminder, validateLog } from '../src/lib/worklog.js'
@@ -88,5 +88,15 @@ describe('worklog', () => {
       { projectName: 'A', createdAt: new Date(2026, 9, 20).toISOString(), closedAt: at(11) },
     ]
     expect(dayDefectStats(records, day, 'A')).toEqual({ opened: 2, closed: 2 })
+  })
+})
+
+describe('default floors', () => {
+  it('covers B6 to 30F plus roof, already in display order', () => {
+    expect(FLOORS.slice(0, 7)).toEqual(['B6', 'B5', 'B4', 'B3', 'B2', 'B1', '1F'])
+    expect(FLOORS).toContain('30F')
+    expect(FLOORS).not.toContain('31F')
+    expect(FLOORS.filter((f) => /^\d+F$/.test(f))).toHaveLength(30)
+    expect(sortFloors(FLOORS).slice(0, 36)).toEqual(FLOORS.slice(0, 36))
   })
 })
