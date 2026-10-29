@@ -1,6 +1,7 @@
 -- 預設案場、工種、常見項目與分包商（已存在則略過）
 insert into projects (name) values
-  ('六張犁')
+  ('六張犁'),
+  ('復興崗')
 on conflict (name) do nothing;
 
 insert into trades (id, label, icon, sort) values

@@ -61,6 +61,7 @@ describe.skipIf(!DB_URL)('API', () => {
     expect(body.trades.find((t) => t.id === 'mep').items).toContain('管線未封')
     expect(body.contractors.find((c) => c.tradeId === 'masonry').name).toBe('大成泥作工班')
     expect(body.projects).toContain('六張犁')
+    expect(body.projects).toContain('復興崗')
   })
 
   it('requires the app token', async () => {

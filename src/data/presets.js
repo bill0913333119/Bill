@@ -16,7 +16,7 @@ export const LEGACY_FLOORS = [
 ]
 
 // 案場：輸入工程專案時可直接點選
-export const PROJECTS = ['六張犁']
+export const PROJECTS = ['六張犁', '復興崗']
 
 export const BUILDINGS = ['A棟', 'B棟', 'C棟', '公設']
 
