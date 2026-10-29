@@ -9,7 +9,8 @@ insert into trades (id, label, icon, sort) values
   ('mep',        '水電', '⚡', 3),
   ('rebar',      '鋼筋', '🏗️', 4),
   ('formwork',   '模板', '🪵', 5),
-  ('safety',     '工安', '⛑️', 6)
+  ('safety',     '工安', '⛑️', 6),
+  ('fire',       '消防', '🧯', 7)
 on conflict (id) do nothing;
 
 insert into trade_items (trade_id, label, sort)
@@ -19,7 +20,8 @@ select t, l, o from (values
   ('mep', '管線未封', 1), ('mep', '留管位置錯誤', 2), ('mep', '線路外露', 3), ('mep', '開關盒歪斜', 4), ('mep', '套管未預埋', 5),
   ('rebar', '鋼筋外露', 1), ('rebar', '保護層不足', 2), ('rebar', '搭接長度不足', 3), ('rebar', '綁紮不確實', 4), ('rebar', '箍筋間距過大', 5),
   ('formwork', '模板變形', 1), ('formwork', '支撐不足', 2), ('formwork', '接縫漏漿', 3), ('formwork', '垂直度偏差', 4), ('formwork', '清潔口未清', 5),
-  ('safety', '開口未防護', 1), ('safety', '護欄缺損', 2), ('safety', '未戴安全帽', 3), ('safety', '材料堆置不當', 4), ('safety', '施工架未固定', 5)
+  ('safety', '開口未防護', 1), ('safety', '護欄缺損', 2), ('safety', '未戴安全帽', 3), ('safety', '材料堆置不當', 4), ('safety', '施工架未固定', 5),
+  ('fire', '泵浦配管缺漏', 1), ('fire', '泵浦漏水', 2), ('fire', '撒水頭未裝', 3), ('fire', '消防栓箱缺件', 4), ('fire', '管路未試壓', 5)
 ) as v(t, l, o)
 on conflict (trade_id, label) do nothing;
 
@@ -30,4 +32,8 @@ insert into contractors (id, name, trade_id) values
   ('c4', '鋼強鋼筋工程',   'rebar'),
   ('c5', '協力模板工程',   'formwork'),
   ('c6', '工地安衛小組',   'safety')
+on conflict (id) do nothing;
+
+insert into contractors (id, name, trade_id, phone) values
+  ('c7', '國信工程有限公司', 'fire', '02-2368-0101')
 on conflict (id) do nothing;

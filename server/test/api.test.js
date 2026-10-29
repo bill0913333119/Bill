@@ -57,7 +57,7 @@ describe.skipIf(!DB_URL)('API', () => {
 
   it('serves presets from seed data', async () => {
     const { body } = await request(app).get('/api/presets').expect(200)
-    expect(body.trades).toHaveLength(6)
+    expect(body.trades).toHaveLength(7)
     expect(body.trades.find((t) => t.id === 'mep').items).toContain('管線未封')
     expect(body.contractors.find((c) => c.tradeId === 'masonry').name).toBe('大成泥作工班')
     expect(body.projects).toContain('六張犁')

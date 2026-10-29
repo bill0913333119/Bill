@@ -57,6 +57,12 @@ export const TRADES = [
     icon: '⛑️',
     items: ['開口未防護', '護欄缺損', '未戴安全帽', '材料堆置不當', '施工架未固定'],
   },
+  {
+    id: 'fire',
+    label: '消防',
+    icon: '🧯',
+    items: ['泵浦配管缺漏', '泵浦漏水', '撒水頭未裝', '消防栓箱缺件', '管路未試壓'],
+  },
 ]
 
 export const CONTRACTORS = [
@@ -66,6 +72,7 @@ export const CONTRACTORS = [
   { id: 'c4', name: '鋼強鋼筋工程', tradeId: 'rebar', phone: '' },
   { id: 'c5', name: '協力模板工程', tradeId: 'formwork', phone: '' },
   { id: 'c6', name: '工地安衛小組', tradeId: 'safety', phone: '' },
+  { id: 'c7', name: '國信工程有限公司', tradeId: 'fire', phone: '02-2368-0101' },
 ]
 
 export const SEVERITIES = [
