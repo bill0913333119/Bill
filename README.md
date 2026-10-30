@@ -46,7 +46,7 @@ DATABASE_URL=postgres://user:pass@localhost:5432/defect npm run dev     # :3000
 npm install && npm run dev                                              # :5173
 ```
 
-正式部署：**Render 一鍵部署請見 [`docs/Render部署.md`](docs/Render部署.md)**；或 `npm run build` 後由後端一併提供前端（`dist/`），或 `docker compose up -d`。
+正式部署：**Render 一鍵部署（免費試用）請見 [`docs/Render部署.md`](docs/Render部署.md)**；或 `npm run build` 後由後端一併提供前端（`dist/`），或 `docker compose up -d`。
 **必須使用 HTTPS**，相機、語音、分享與 LIFF 才能運作。環境變數見 `.env.example`。
 
 ### 測試
@@ -68,6 +68,7 @@ cd server && TEST_DATABASE_URL=postgres://.../defect_test npm test   # API 整�
 ## 照片儲存
 
 - 預設存於伺服器本機 `UPLOAD_DIR`，由 `/files/...` 提供（檔名為隨機 UUID）。
+- `STORAGE=db` 改存 PostgreSQL（`stored_files` 資料表），適合沒有持久磁碟的主機，例如 Render 免費方案。
 - 設定 `S3_*` 改用 AWS S3 或 Cloudflare R2；`S3_PUBLIC_URL` 需可公開讀取並允許前端網域的 CORS（PDF 產生時需讀取照片）。
 
 ## API

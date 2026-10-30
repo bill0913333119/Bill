@@ -41,3 +41,22 @@ export async function s3Storage(cfg) {
     owns: (url) => url.startsWith(`${cfg.publicUrl}/`),
   }
 }
+
+/**
+ * 資料庫儲存：檔案寫入 stored_files，由 Express 以 /files 提供。
+ * 適合沒有持久磁碟的主機（例如 Render 免費方案，重啟後本機檔案會消失）。
+ */
+export function dbStorage({ pool, publicUrl }) {
+  return {
+    async put(prefix, buffer, contentType) {
+      const key = objectKey(prefix, contentType)
+      await pool.query('insert into stored_files (key, content_type, data) values ($1, $2, $3)', [key, contentType, buffer])
+      return `${publicUrl}/files/${key}`
+    },
+    owns: (url) => url.startsWith(`${publicUrl}/files/`) && !url.includes('..'),
+    async get(key) {
+      const { rows } = await pool.query('select content_type, data from stored_files where key = $1', [key])
+      return rows[0] ? { contentType: rows[0].content_type, data: rows[0].data } : null
+    },
+  }
+}

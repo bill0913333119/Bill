@@ -1,22 +1,18 @@
 # Render Blueprint：一鍵建立網站（前端＋API）與 PostgreSQL 資料庫
-# 用法：Render Dashboard → New → Blueprint → 選這個 GitHub repo
-# 說明文件：docs/Render部署.md
+# 目前為「免費試用」設定；正式使用請依 docs/Render部署.md 升級方案
+# 一鍵部署：https://render.com/deploy?repo=https://github.com/bill0913333119/Bill
 
 services:
   - type: web
     name: site-defect
     runtime: node
     region: singapore          # 離台灣最近的機房
-    plan: starter              # 需要付費方案才能掛載磁碟保存照片；改用 R2 時可降為 free
+    plan: free                 # 免費：閒置約 15 分鐘會休眠，再次開啟需等候約 1 分鐘
     branch: main
     buildCommand: npm ci --include=dev && npm run build && npm ci --prefix server --omit=dev
     startCommand: node server/src/index.js
     healthCheckPath: /api/health
     autoDeploy: true
-    disk:
-      name: uploads
-      mountPath: /var/data
-      sizeGB: 5
     envVars:
       - key: NODE_VERSION
         value: "22"
@@ -24,8 +20,9 @@ services:
         fromDatabase:
           name: site-defect-db
           property: connectionString
-      - key: UPLOAD_DIR
-        value: /var/data/uploads
+      # 免費方案沒有持久磁碟，照片與 PDF 改存資料庫，休眠重啟也不會遺失
+      - key: STORAGE
+        value: db
       # 工程師 App 連線金鑰：Render 自動產生，到 Environment 頁複製後在 App「設定」輸入
       - key: APP_TOKEN
         generateValue: true
@@ -43,7 +40,7 @@ services:
 databases:
   - name: site-defect-db
     region: singapore
-    plan: basic-256mb
+    plan: free                 # 免費資料庫有使用期限，到期前請升級，否則資料會被刪除
     databaseName: defect
     user: defect
     postgresMajorVersion: "16"

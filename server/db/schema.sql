@@ -101,3 +101,11 @@ create table if not exists daily_logs (
 );
 
 create index if not exists daily_logs_date_idx on daily_logs (log_date, project_id);
+
+-- 照片／PDF 存於資料庫（STORAGE=db，免費主機無持久磁碟時使用）
+create table if not exists stored_files (
+  key           text primary key,
+  content_type  text not null,
+  data          bytea not null,
+  created_at    timestamptz not null default now()
+);

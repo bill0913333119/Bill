@@ -189,7 +189,16 @@ export function createApp({ pool, storage, line, config }) {
   })
 
   // ---------- 靜態檔案：上傳檔與前端 ----------
-  app.use('/files', express.static(config.uploadDir, { immutable: true, maxAge: '30d', fallthrough: false }))
+  if (storage.get) {
+    app.get('/files/{*key}', async (req, res) => {
+      const file = await storage.get(req.params.key.join('/'))
+      if (!file) throw new HttpError(404, 'Not found')
+      res.set({ 'Content-Type': file.contentType, 'Cache-Control': 'public, max-age=2592000, immutable' })
+      res.send(file.data)
+    })
+  } else {
+    app.use('/files', express.static(config.uploadDir, { immutable: true, maxAge: '30d', fallthrough: false }))
+  }
   if (existsSync(config.staticDir)) {
     app.use(express.static(config.staticDir))
     app.get('/{*splat}', (_req, res) => res.sendFile(path.join(config.staticDir, 'index.html')))
