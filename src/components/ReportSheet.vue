@@ -50,7 +50,7 @@ const inspector = computed(() => r.value.inspector || store.settings.inspector)
 
     <div class="cols">
       <div class="section">缺失現況照片</div>
-      <div class="section after">改善後對照（廠商填寫）</div>
+      <div class="section after">改善後對照</div>
     </div>
     <div class="compare" :style="{ gridTemplateRows: `repeat(${rows.length}, minmax(0, 1fr))` }">
       <template v-for="(row, i) in rows" :key="i">
@@ -66,6 +66,9 @@ const inspector = computed(() => r.value.inspector || store.settings.inspector)
       <b>改善說明：</b>
       <span v-if="r.replyNote" class="reply-text">{{ r.replyNote }}</span>
       <span v-if="r.repliedAt" class="reply-date">（回報時間：{{ formatDateTime(r.repliedAt) }}）</span>
+      <div v-if="r.status === 'closed' && r.reviewNote" class="close-note">
+        <b>複查／銷案說明：</b>{{ r.reviewNote }}
+      </div>
     </div>
 
     <table class="sign">
@@ -79,7 +82,7 @@ const inspector = computed(() => r.value.inspector || store.settings.inspector)
       </tr>
     </table>
 
-    <div v-if="r.status === 'closed'" class="stamp">已結案<br /><small>{{ r.closedAt ? formatDateTime(r.closedAt) : '' }}</small></div>
+    <div v-if="r.status === 'closed'" class="stamp">已銷案<br /><small>{{ r.closedAt ? formatDateTime(r.closedAt) : '' }}</small></div>
   </div>
 </template>
 
@@ -121,10 +124,12 @@ const inspector = computed(() => r.value.inspector || store.settings.inspector)
 .reply { border: 1px solid #555; padding: 6px 10px; min-height: 44px; line-height: 1.6; }
 .reply-text { white-space: pre-wrap; }
 .reply-date { color: #555; font-size: 12px; }
+.close-note { margin-top: 2px; white-space: pre-wrap; }
 .sign th { width: 25%; text-align: center; }
 .sign td { height: 78px; text-align: center; vertical-align: middle; }
 .sig { max-width: 140px; max-height: 52px; display: block; margin: 0 auto; }
 .sig-name { font-size: 12px; color: #444; margin-top: 2px; }
-.stamp { position: absolute; right: 70px; bottom: 170px; transform: rotate(-12deg); border: 4px solid #dc2626; color: #dc2626; border-radius: 12px; padding: 6px 18px; font-size: 30px; font-weight: 900; text-align: center; line-height: 1.1; opacity: .85; background: rgba(255,255,255,.6); }
+/* 蓋在「複查確認」簽核格 */
+.stamp { position: absolute; right: 74px; bottom: 34px; transform: rotate(-12deg); border: 4px solid #dc2626; color: #dc2626; border-radius: 12px; padding: 3px 14px; font-size: 24px; font-weight: 900; text-align: center; line-height: 1.05; opacity: .85; background: rgba(255,255,255,.6); }
 .stamp small { font-size: 12px; font-weight: 700; }
 </style>

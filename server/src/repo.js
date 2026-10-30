@@ -155,9 +155,10 @@ export async function submitReply(pool, defectId, { note, photos }) {
 }
 
 /** 工程師複查：closed 結案；open 退回（已回報者）或重開。 */
-export async function reviewDefect(pool, defectId, { status, reviewNote, pdfUrl }, before) {
+export async function reviewDefect(pool, defectId, { status, reviewNote, pdfUrl, afterPhotos }, before) {
   return tx(pool, async (client) => {
     if (pdfUrl) await client.query('update defects set pdf_url = $2 where id = $1', [defectId, pdfUrl])
+    if (afterPhotos) await replacePhotos(client, defectId, 'after', afterPhotos)
     if (status && status !== before.status) {
       await client.query(
         `update defects set status = $2, review_note = $3,

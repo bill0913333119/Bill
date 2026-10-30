@@ -22,7 +22,11 @@ async function request(method, path, body, { raw = false, contentType } = {}) {
     body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   })
-  const data = await res.json().catch(() => ({}))
+  // 靜態主機（例如預覽網址）會以首頁 HTML 回應 /api/*：視為沒有後端，維持離線模式
+  if (!res.headers.get('content-type')?.includes('application/json')) {
+    throw new Error(`後端未回應（HTTP ${res.status}）`)
+  }
+  const data = await res.json()
   if (!res.ok) throw new ApiError(res.status, data.error ?? `HTTP ${res.status}`)
   return data
 }

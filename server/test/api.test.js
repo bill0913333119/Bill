@@ -128,6 +128,21 @@ describe.skipIf(!DB_URL)('API', () => {
     expect(rows.map((r) => r.action)).toEqual(['created', 'replied', 'rejected', 'replied', 'closed'])
   })
 
+  it('lets the engineer close a defect with their own after photos', async () => {
+    const id = crypto.randomUUID()
+    await request(app).put(`/api/defects/${id}`).set(auth).send(defect({ reportNo: '' })).expect(200)
+    const after = await upload()
+    await request(app).patch(`/api/defects/${id}`).set(auth).send({ status: 'open', afterPhotos: [after] }).expect(400)
+    await request(app).patch(`/api/defects/${id}`).set(auth).send({ status: 'closed', afterPhotos: [] }).expect(400)
+    await request(app).patch(`/api/defects/${id}`).set(auth).send({ status: 'closed', afterPhotos: ['https://evil.example/a.jpg'] }).expect(400)
+    const closed = (await request(app).patch(`/api/defects/${id}`).set(auth)
+      .send({ status: 'closed', afterPhotos: [after], reviewNote: '現場複查已改善' }).expect(200)).body
+    expect(closed).toMatchObject({ status: 'closed', afterPhotos: [after], reviewNote: '現場複查已改善' })
+    expect(closed.closedAt).toBeTruthy()
+    const { rows } = await pool.query('select action, note from defect_logs where defect_id = $1 order by id', [id])
+    expect(rows.at(-1)).toEqual({ action: 'closed', note: '現場複查已改善' })
+  })
+
   it('stores unit number on defects', async () => {
     const { body } = await request(app).put(`/api/defects/${crypto.randomUUID()}`).set(auth).send(defect({ unit: '301', building: 'A棟' })).expect(200)
     expect(body.unit).toBe('301')

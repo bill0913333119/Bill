@@ -75,7 +75,7 @@ onMounted(load)
         </div>
 
         <div v-if="d.status === 'closed'" class="rounded-3xl bg-green-50 p-6 text-center text-xl font-bold text-green-800">
-          🏁 本缺失已複查結案，辛苦了！
+          🏁 本缺失已複查銷案，辛苦了！
         </div>
 
         <div v-else-if="done || d.status === 'replied'" class="rounded-3xl bg-sky-50 p-6 text-center text-sky-900">

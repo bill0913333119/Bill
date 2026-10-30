@@ -1,9 +1,10 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { defectFlex } from '../../shared/flex.js'
 import { canPickTarget, shareFlex } from '../lib/liff.js'
 import { downloadFile, pdfFile, shareMessage, shareToLine } from '../lib/share.js'
-import { attachPdf, contractorOf, setStatus, store, tradeLabelOf } from '../store.js'
+import { attachPdf, closeWithPhotos, contractorOf, setStatus, store, tradeLabelOf } from '../store.js'
+import AfterPhotoClose from './AfterPhotoClose.vue'
 import ReportSheet from './ReportSheet.vue'
 
 const props = defineProps({ record: { type: Object, required: true } })
@@ -17,6 +18,7 @@ const previewUrl = ref('')
 const status = ref('')
 const busy = ref(true)
 const reviewing = ref(false)
+const closing = ref(false)
 
 async function build({ upload = !rec.value.pdfUrl } = {}) {
   busy.value = true
@@ -69,12 +71,33 @@ async function review(next) {
   }
 }
 
+async function onClosed({ photos, note }) {
+  closing.value = false
+  reviewing.value = true
+  try {
+    await closeWithPhotos(rec.value, { photos, note })
+    // 銷案版 PDF：右欄放入改善後照片並蓋「已銷案」章
+    await build({ upload: true })
+    status.value = '✅ 已銷案，可將銷案單分享至 LINE'
+  } finally {
+    reviewing.value = false
+  }
+}
+
 async function copyReplyLink() {
   await navigator.clipboard.writeText(rec.value.replyUrl)
   status.value = '✅ 已複製廠商回報連結'
 }
 
 onMounted(() => build())
+
+// 離線建立或銷案的單據：連網同步完成後（單號可能由伺服器改配），重新產出 PDF 並上傳
+watch(
+  () => rec.value.synced && !rec.value.closePending,
+  (ready, was) => {
+    if (ready && !was && !busy.value) build({ upload: true })
+  },
+)
 </script>
 
 <template>
@@ -82,7 +105,7 @@ onMounted(() => build())
     <div class="rounded-3xl bg-white p-6 text-center shadow">
       <div class="text-6xl">{{ busy ? '⏳' : rec.status === 'closed' ? '🏁' : rec.status === 'replied' ? '🔍' : '✅' }}</div>
       <h2 class="mt-2 text-2xl font-extrabold">
-        {{ busy ? '正在產出 PDF…' : rec.status === 'closed' ? '已結案' : rec.status === 'replied' ? '廠商已回報，待複查' : '缺失單已建立' }}
+        {{ busy ? '正在產出 PDF…' : rec.status === 'closed' ? '已銷案' : rec.status === 'replied' ? '廠商已回報，待複查' : '缺失單已建立' }}
       </h2>
       <p class="mt-1 text-lg text-slate-600">{{ rec.reportNo }}</p>
       <p class="mt-1 text-sm" :class="rec.synced ? 'text-green-700' : 'text-amber-700'">
@@ -101,16 +124,28 @@ onMounted(() => build())
       <p class="whitespace-pre-wrap text-slate-700">{{ rec.replyNote || '（未填寫說明）' }}</p>
       <div class="grid grid-cols-2 gap-3">
         <button class="btn btn-ghost" :disabled="reviewing" @click="review('open')">↩️ 退回</button>
-        <button class="btn btn-primary" :disabled="reviewing" @click="review('closed')">✅ 通過結案</button>
+        <button class="btn btn-primary" :disabled="reviewing" @click="review('closed')">✅ 通過並銷案</button>
       </div>
     </div>
 
-    <template v-if="rec.status !== 'closed'">
-      <button class="btn btn-line w-full min-h-20 text-2xl" :disabled="busy" @click="share">
-        <span class="text-3xl">💬</span>產出並分享至 LINE
-      </button>
-      <p v-if="status" class="text-center font-semibold text-green-700">{{ status }}</p>
-    </template>
+    <!-- 已銷案：顯示改善後照片與銷案資訊 -->
+    <div v-if="rec.status === 'closed' && rec.afterPhotos?.length" class="space-y-3 rounded-3xl bg-white p-5 shadow ring-2 ring-green-300">
+      <h3 class="text-lg font-extrabold">🏁 改善後照片</h3>
+      <div class="grid grid-cols-3 gap-2">
+        <img v-for="(p, i) in rec.afterPhotos" :key="i" :src="p" class="aspect-square w-full rounded-xl object-cover" alt="改善後照片" />
+      </div>
+      <p v-if="rec.reviewNote" class="whitespace-pre-wrap text-slate-700">{{ rec.reviewNote }}</p>
+      <p v-if="rec.closePending" class="text-sm text-amber-700">📴 銷案尚未同步，連網後自動上傳</p>
+    </div>
+
+    <button v-if="rec.status === 'open'" class="btn btn-primary min-h-20 w-full text-2xl" :disabled="busy || reviewing" @click="closing = true">
+      <span class="text-3xl">📷</span>改善後拍照銷案
+    </button>
+
+    <button class="btn btn-line w-full min-h-20 text-2xl" :disabled="busy" @click="share">
+      <span class="text-3xl">💬</span>{{ rec.status === 'closed' ? '分享銷案單至 LINE' : '產出並分享至 LINE' }}
+    </button>
+    <p v-if="status" class="text-center font-semibold text-green-700">{{ status }}</p>
 
     <div class="grid grid-cols-2 gap-3">
       <a class="btn btn-ghost" :class="{ 'pointer-events-none opacity-40': busy }" :href="previewUrl" target="_blank">👁️ 預覽 PDF</a>
@@ -118,7 +153,6 @@ onMounted(() => build())
     </div>
     <button v-if="rec.replyUrl && rec.status === 'open'" class="btn btn-ghost w-full text-lg" @click="copyReplyLink">🔗 複製廠商回報連結</button>
     <button v-if="rec.status === 'closed'" class="btn btn-ghost w-full text-lg" :disabled="reviewing" @click="review('open')">重新開啟</button>
-    <button v-if="rec.status === 'open'" class="btn btn-ghost w-full text-lg" :disabled="reviewing" @click="review('closed')">現場確認已改善，直接結案</button>
 
     <button class="btn btn-primary w-full" @click="emit('new')">➕ 再登錄一筆</button>
     <button class="w-full py-3 text-slate-500" @click="emit('close')">回到紀錄列表</button>
@@ -127,5 +161,7 @@ onMounted(() => build())
     <div style="position: fixed; left: -10000px; top: 0" aria-hidden="true">
       <ReportSheet ref="sheet" :record="rec" />
     </div>
+
+    <AfterPhotoClose v-if="closing" :record="rec" @done="onClosed" @cancel="closing = false" />
   </section>
 </template>

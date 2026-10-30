@@ -115,9 +115,13 @@ export async function syncRecord(record) {
     remotePhotos.push(isDataUrl(p) ? await api.uploadBlob(await api.dataUrlToBlob(p)) : p)
   }
   const saved = await api.putDefect(record.id, { ...record, photos: remotePhotos })
-  return saveLocal({ ...record, ...pickServerFields(saved), remotePhotos, synced: true })
+  const server = pickServerFields(saved)
+  // 離線時已在手機上銷案：伺服器此時仍是「待改善」，保留本機的銷案狀態，稍後由 pushClose 補送
+  if (record.closePending) for (const k of CLOSE_FIELDS) delete server[k]
+  return saveLocal({ ...record, ...server, remotePhotos, synced: true })
 }
 
+const CLOSE_FIELDS = ['status', 'afterPhotos', 'reviewNote', 'closedAt']
 const SERVER_FIELDS = ['reportNo', 'status', 'replyUrl', 'replyNote', 'repliedAt', 'reviewNote', 'afterPhotos', 'closedAt', 'pdfUrl']
 const pickServerFields = (d) => Object.fromEntries(SERVER_FIELDS.map((k) => [k, d[k]]))
 
@@ -126,6 +130,7 @@ export async function syncPending() {
   store.syncing = true
   try {
     for (const r of store.records.filter((r) => !r.synced)) await syncRecord(r)
+    for (const r of store.records.filter((r) => r.synced && r.closePending)) await pushClose(r)
     for (const l of store.logs.filter((l) => l.submittedAt && !l.synced)) await syncLog(l)
   } finally {
     store.syncing = false
@@ -140,6 +145,7 @@ export async function refreshRecords() {
   for (const d of remote) {
     const local = store.records.find((r) => r.id === d.id)
     if (!local) await saveLocal({ ...d, remotePhotos: d.photos, synced: true })
+    else if (local.closePending) continue
     else if (SERVER_FIELDS.some((k) => JSON.stringify(local[k]) !== JSON.stringify(d[k]))) {
       await saveLocal({ ...local, ...pickServerFields(d) })
     }
@@ -175,9 +181,51 @@ export async function setStatus(record, status, reviewNote = '') {
   if (record.synced) {
     if (!store.server.available) throw new Error('需連線才能變更狀態')
     const saved = await api.patchDefect(record.id, { status, reviewNote })
-    return saveLocal({ ...record, ...pickServerFields(saved) })
+    return saveLocal({ ...record, ...pickServerFields(saved), closePending: false })
   }
-  return saveLocal({ ...record, status, reviewNote, closedAt: status === 'closed' ? new Date().toISOString() : null })
+  return saveLocal({
+    ...record,
+    status,
+    reviewNote,
+    closedAt: status === 'closed' ? new Date().toISOString() : null,
+    closePending: status === 'closed',
+  })
+}
+
+/** 把手機上的銷案（含改善後照片）送到伺服器。 */
+async function pushClose(record) {
+  const urls = []
+  for (const p of record.afterPhotos ?? []) {
+    urls.push(isDataUrl(p) ? await api.uploadBlob(await api.dataUrlToBlob(p)) : p)
+  }
+  const body = { status: 'closed', reviewNote: record.reviewNote ?? '' }
+  if (urls.length) body.afterPhotos = urls
+  const saved = await api.patchDefect(record.id, body)
+  return saveLocal({ ...record, ...pickServerFields(saved), closePending: false })
+}
+
+/**
+ * 工程師現場複查：拍改善後照片並銷案。沒網路時先存在手機，連網後自動補送。
+ * @param {{ photos: string[], note: string }} p photos 為 dataURL，與缺失照片依序對照
+ */
+export async function closeWithPhotos(record, { photos, note }) {
+  let saved = await saveLocal({
+    ...record,
+    status: 'closed',
+    afterPhotos: photos,
+    reviewNote: note,
+    closedAt: new Date().toISOString(),
+    closedBy: store.settings.inspector,
+    closePending: true,
+  })
+  if (store.server.available && saved.synced) {
+    try {
+      saved = await pushClose(saved)
+    } catch (e) {
+      console.warn('銷案同步失敗，連網後自動重試', e)
+    }
+  }
+  return saved
 }
 
 export const contractorOf = (id) => store.presets.contractors.find((c) => c.id === id) ?? null
@@ -187,7 +235,8 @@ export const tradeLabelOf = (id) => {
 }
 
 export const pendingCount = () =>
-  store.records.filter((r) => !r.synced).length + store.logs.filter((l) => l.submittedAt && !l.synced).length
+  store.records.filter((r) => !r.synced || r.closePending).length +
+  store.logs.filter((l) => l.submittedAt && !l.synced).length
 
 // ---------- 棟別／樓層清單編輯 ----------
 export function setBuildings(list) {
