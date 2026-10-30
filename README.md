@@ -29,6 +29,7 @@
 | A4 PDF | 工程缺失改善通知單：表頭資訊、缺失現況照片（含紅圈）與右側「改善後對照」預留框、廠商改善說明、四格簽核（開單工程師自動蓋簽名）；結案後重新產出，改善照片自動填入並蓋「已結案」章 |
 | LINE 分享 | 手機以 Web Share API 呼叫原生 LINE，直接傳送與儲存檔同一份 PDF（含照片），並附上與 PDF 欄位一致的文字摘要；LIFF 內：shareTargetPicker 傳**圖文卡片**（含「回報改善」「下載 PDF」按鈕）；一般瀏覽器：Web Share API 直接傳 PDF 檔 |
 | LINE 官方帳號 | Rich Menu（新增缺失／缺失紀錄／使用說明）；群組輸入「綁定 專案名稱」後，廠商回報與退回會推播到群組 |
+| 改善後拍照銷案 | 工程師現場複查時，逐張對照缺失照片拍下改善後照片（可標註、口述說明）並銷案；PDF 右欄自動放入改善後照片、於「複查確認」欄蓋「已銷案」章，可再分享銷案單至 LINE；地下室無訊號時先存手機，連網後自動同步 |
 | 廠商回報 | 每筆缺失有專屬連結 `/#/reply/<token>`，免登入拍照上傳改善後照片 |
 | 複查 | 待改善 → 待複查 → 已結案；可退回並附原因（廠商頁會顯示），全程記錄於 `defect_logs` |
 
@@ -46,7 +47,7 @@ DATABASE_URL=postgres://user:pass@localhost:5432/defect npm run dev     # :3000
 npm install && npm run dev                                              # :5173
 ```
 
-正式部署：**Render 一鍵部署請見 [`docs/Render部署.md`](docs/Render部署.md)**；或 `npm run build` 後由後端一併提供前端（`dist/`），或 `docker compose up -d`。
+正式部署：**Render 一鍵部署（免費試用）請見 [`docs/Render部署.md`](docs/Render部署.md)**；或 `npm run build` 後由後端一併提供前端（`dist/`），或 `docker compose up -d`。
 **必須使用 HTTPS**，相機、語音、分享與 LIFF 才能運作。環境變數見 `.env.example`。
 
 ### 測試
@@ -68,6 +69,7 @@ cd server && TEST_DATABASE_URL=postgres://.../defect_test npm test   # API 整�
 ## 照片儲存
 
 - 預設存於伺服器本機 `UPLOAD_DIR`，由 `/files/...` 提供（檔名為隨機 UUID）。
+- `STORAGE=db` 改存 PostgreSQL（`stored_files` 資料表），適合沒有持久磁碟的主機，例如 Render 免費方案。
 - 設定 `S3_*` 改用 AWS S3 或 Cloudflare R2；`S3_PUBLIC_URL` 需可公開讀取並允許前端網域的 CORS（PDF 產生時需讀取照片）。
 
 ## API

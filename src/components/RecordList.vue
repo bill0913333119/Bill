@@ -11,13 +11,13 @@ const today = toDateInput(new Date())
 const FILTERS = [
   ['open', '待改善'],
   ['replied', '待複查'],
-  ['closed', '已結案'],
+  ['closed', '已銷案'],
   ['all', '全部'],
 ]
 const STATUS = {
   open: { text: '待改善', cls: 'bg-amber-100 text-amber-800' },
   replied: { text: '待複查', cls: 'bg-sky-100 text-sky-800' },
-  closed: { text: '已結案', cls: 'bg-slate-100 text-slate-600' },
+  closed: { text: '已銷案', cls: 'bg-slate-100 text-slate-600' },
 }
 
 const list = computed(() =>

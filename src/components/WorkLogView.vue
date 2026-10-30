@@ -80,7 +80,7 @@ async function leave() {
 
     <div class="grid grid-cols-3 gap-2 text-center">
       <div class="rounded-2xl bg-white p-3 shadow-sm"><div class="text-2xl font-extrabold">{{ log.defectsOpened }}</div><div class="text-sm text-slate-500">今日開單</div></div>
-      <div class="rounded-2xl bg-white p-3 shadow-sm"><div class="text-2xl font-extrabold text-green-700">{{ log.defectsClosed }}</div><div class="text-sm text-slate-500">今日結案</div></div>
+      <div class="rounded-2xl bg-white p-3 shadow-sm"><div class="text-2xl font-extrabold text-green-700">{{ log.defectsClosed }}</div><div class="text-sm text-slate-500">今日銷案</div></div>
       <div class="rounded-2xl bg-white p-3 shadow-sm" :class="overdue.length ? 'ring-2 ring-red-400' : ''">
         <div class="text-2xl font-extrabold" :class="overdue.length ? 'text-red-600' : ''">{{ overdue.length }}</div><div class="text-sm text-slate-500">逾期未改</div>
       </div>
@@ -137,7 +137,7 @@ async function leave() {
       <h3 class="label">近 7 天日誌</h3>
       <ul class="space-y-2">
         <li v-for="l in history" :key="l.id" class="rounded-2xl bg-white p-3 text-sm shadow-sm">
-          <div class="flex justify-between font-bold"><span>{{ l.date }} {{ WEATHERS.find((w) => w.id === l.weather)?.icon }}</span><span class="text-slate-500">開單 {{ l.defectsOpened }}・結案 {{ l.defectsClosed }}</span></div>
+          <div class="flex justify-between font-bold"><span>{{ l.date }} {{ WEATHERS.find((w) => w.id === l.weather)?.icon }}</span><span class="text-slate-500">開單 {{ l.defectsOpened }}・銷案 {{ l.defectsClosed }}</span></div>
           <div class="mt-1 line-clamp-2 text-slate-600">{{ l.workContent }}</div>
         </li>
       </ul>

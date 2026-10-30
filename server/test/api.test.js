@@ -6,7 +6,7 @@ import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createApp } from '../src/app.js'
 import { createPool, migrate } from '../src/db.js'
-import { localStorage } from '../src/storage.js'
+import { dbStorage, localStorage } from '../src/storage.js'
 
 // 需要可用的 PostgreSQL：TEST_DATABASE_URL=postgres://... npm test
 const DB_URL = process.env.TEST_DATABASE_URL
@@ -128,6 +128,21 @@ describe.skipIf(!DB_URL)('API', () => {
     expect(rows.map((r) => r.action)).toEqual(['created', 'replied', 'rejected', 'replied', 'closed'])
   })
 
+  it('lets the engineer close a defect with their own after photos', async () => {
+    const id = crypto.randomUUID()
+    await request(app).put(`/api/defects/${id}`).set(auth).send(defect({ reportNo: '' })).expect(200)
+    const after = await upload()
+    await request(app).patch(`/api/defects/${id}`).set(auth).send({ status: 'open', afterPhotos: [after] }).expect(400)
+    await request(app).patch(`/api/defects/${id}`).set(auth).send({ status: 'closed', afterPhotos: [] }).expect(400)
+    await request(app).patch(`/api/defects/${id}`).set(auth).send({ status: 'closed', afterPhotos: ['https://evil.example/a.jpg'] }).expect(400)
+    const closed = (await request(app).patch(`/api/defects/${id}`).set(auth)
+      .send({ status: 'closed', afterPhotos: [after], reviewNote: '現場複查已改善' }).expect(200)).body
+    expect(closed).toMatchObject({ status: 'closed', afterPhotos: [after], reviewNote: '現場複查已改善' })
+    expect(closed.closedAt).toBeTruthy()
+    const { rows } = await pool.query('select action, note from defect_logs where defect_id = $1 order by id', [id])
+    expect(rows.at(-1)).toEqual({ action: 'closed', note: '現場複查已改善' })
+  })
+
   it('stores unit number on defects', async () => {
     const { body } = await request(app).put(`/api/defects/${crypto.randomUUID()}`).set(auth).send(defect({ unit: '301', building: 'A棟' })).expect(200)
     expect(body.unit).toBe('301')
@@ -164,6 +179,19 @@ describe.skipIf(!DB_URL)('API', () => {
     const list = (await request(app).get(`/api/logs?date=${day}&project=日誌案`).set(auth).expect(200)).body
     expect(list).toHaveLength(1)
     expect(list[0]).toMatchObject({ weather: 'rain', defectsOpened: 2 })
+  })
+
+  it('stores and serves files from the database when STORAGE=db', async () => {
+    const dbApp = createApp({ pool, storage: dbStorage({ pool, publicUrl: PUBLIC }), line: { enabled: false }, config })
+    const pdf = Buffer.from('%PDF-1.4 test')
+    const { url } = (await request(dbApp).post('/api/uploads').set(auth).set('Content-Type', 'application/pdf').send(pdf).expect(201)).body
+    expect(url).toMatch(new RegExp(`^${PUBLIC}/files/pdf/\\d{4}-\\d{2}-\\d{2}/[\\w-]+\\.pdf$`))
+    const res = await request(dbApp).get(url.slice(PUBLIC.length)).expect(200)
+    expect(res.headers['content-type']).toBe('application/pdf')
+    expect(Buffer.from(res.body).toString()).toBe('%PDF-1.4 test')
+    await request(dbApp).get('/files/pdf/nope.pdf').expect(404)
+    // 上傳的網址可被缺失單引用
+    await request(dbApp).put(`/api/defects/${crypto.randomUUID()}`).set(auth).send(defect({ reportNo: '', pdfUrl: url })).expect(200)
   })
 
   it('verifies LINE webhook signatures and binds groups', async () => {

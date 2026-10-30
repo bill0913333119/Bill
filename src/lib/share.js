@@ -1,4 +1,4 @@
-import { locationOf } from './defect.js'
+import { formatDateTime, locationOf } from './defect.js'
 
 export function pdfFile(blob, reportNo) {
   return new File([blob], `${reportNo}_缺失改善單.pdf`, { type: 'application/pdf' })
@@ -9,8 +9,9 @@ export function pdfFile(blob, reportNo) {
  */
 export function shareMessage(record, { tradeLabel, contractorName }) {
   const sev = record.severity === 'major' ? '🔴【重大缺失】' : '🟢【一般缺失】'
+  const closed = record.status === 'closed'
   return [
-    `${sev} 工程缺失改善通知單 ${record.reportNo}`,
+    closed ? `✅【已改善銷案】工程缺失改善通知單 ${record.reportNo}` : `${sev} 工程缺失改善通知單 ${record.reportNo}`,
     `專案：${record.projectName}`,
     `位置：${locationOf(record)}`,
     `工種／項目：${tradeLabel}／${record.item}`,
@@ -18,8 +19,12 @@ export function shareMessage(record, { tradeLabel, contractorName }) {
     `責任廠商：${contractorName}`,
     `限期改善：${record.dueDate}`,
     record.inspector ? `開單人員：${record.inspector}` : '',
-    `（缺失照片與改善對照詳見附件 PDF，共 ${record.photos.length} 張）`,
-    record.replyUrl ? `📷 回報改善：${record.replyUrl}` : '',
+    closed && record.closedAt ? `銷案時間：${formatDateTime(record.closedAt)}` : '',
+    closed && record.reviewNote ? `銷案說明：${record.reviewNote}` : '',
+    closed
+      ? `（缺失照片 ${record.photos.length} 張與改善後照片 ${record.afterPhotos?.length ?? 0} 張對照，詳見附件 PDF）`
+      : `（缺失照片與改善對照詳見附件 PDF，共 ${record.photos.length} 張）`,
+    !closed && record.replyUrl ? `📷 回報改善：${record.replyUrl}` : '',
     record.pdfUrl ? `📄 下載：${record.pdfUrl}` : '',
   ]
     .filter(Boolean)
