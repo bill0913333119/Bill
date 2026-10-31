@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>工地即時口譯</title>
+<link rel="icon" href="./icon.svg">
+<style>
+  /* 版面：上方雙語設定，中間對話紀錄，下方兩顆大麥克風鍵（我方／對方），工地單手操作 */
+  :root {
+    --bg: #f3f5f4; --surface: #ffffff; --fg: #1b2420; --muted: #5d6b65; --line: #d9e0dc;
+    --a: #0f6b5c; --a-soft: #e2f1ed; --b: #9a5b12; --b-soft: #f7ecdc; --danger: #b3261e;
+    --font: "Noto Sans TC", system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121816; --surface: #1b2320; --fg: #e6ece9; --muted: #9aa8a2; --line: #2d3833;
+      --a: #4fc2ad; --a-soft: #1b3530; --b: #e0a55c; --b-soft: #3a2c1a; --danger: #f2867e; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121816; --surface: #1b2320; --fg: #e6ece9; --muted: #9aa8a2; --line: #2d3833;
+    --a: #4fc2ad; --a-soft: #1b3530; --b: #e0a55c; --b-soft: #3a2c1a; --danger: #f2867e; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg); font: 16px/1.55 var(--font);
+    display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top, 0px) max(12px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(12px, env(safe-area-inset-left, 0px));
+  }
+  .wrap { width: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; padding-block: 12px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  h1 { font-size: 1.15rem; margin: 0; }
+  .tools { display: flex; gap: 6px; }
+  .tools button, .chip { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: .85rem; cursor: pointer; }
+  .langs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: end; }
+  .langs label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--muted); letter-spacing: .04em; }
+  select { font: inherit; font-size: 1rem; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); width: 100%; }
+  #langA { border-color: var(--a); } #langB { border-color: var(--b); }
+  #swap { height: 42px; width: 42px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font-size: 1.1rem; cursor: pointer; }
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; font-size: .88rem; color: var(--muted); }
+  .opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  #log { flex: 1; min-height: 180px; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .empty { color: var(--muted); margin: auto; text-align: center; max-width: 32ch; }
+  .msg { border-radius: 10px; padding: 10px 12px; max-width: 92%; }
+  .msg.a { background: var(--a-soft); align-self: flex-start; }
+  .msg.b { background: var(--b-soft); align-self: flex-end; }
+  .msg .src { font-size: .85rem; color: var(--muted); }
+  .msg .dst { font-size: var(--size, 1.25rem); font-weight: 600; line-height: 1.4; }
+  .msg.live .dst::after { content: " …"; color: var(--muted); }
+  .msg .meta { display: flex; justify-content: space-between; gap: 8px; font-size: .72rem; color: var(--muted); margin-top: 4px; }
+  .msg .meta button { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
+  #status { min-height: 1.4em; font-size: .85rem; color: var(--muted); text-align: center; }
+  #status.err { color: var(--danger); }
+  .mics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mic { border: 0; border-radius: 14px; padding: 16px 8px; font: inherit; font-size: 1.05rem; font-weight: 700; color: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .mic small { font-weight: 400; font-size: .78rem; opacity: .9; }
+  #micA { background: var(--a); } #micB { background: var(--b); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mic { color: #10140f; } }
+  :root[data-theme="dark"] .mic { color: #10140f; }
+  .mic.on { animation: pulse 1.2s ease-in-out infinite; outline: 3px solid var(--fg); outline-offset: 2px; }
+  @keyframes pulse { 50% { filter: brightness(1.15); } }
+  @media (prefers-reduced-motion: reduce) { .mic.on { animation: none; } }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--a); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>工地即時口譯</h1>
+    <div class="tools">
+      <button id="size" type="button" title="切換字體大小">字 A+</button>
+      <button id="copy" type="button">複製</button>
+      <button id="clear" type="button">清除</button>
+    </div>
+  </header>
+
+  <div class="langs">
+    <label>我方語言<select id="langA"></select></label>
+    <button id="swap" type="button" aria-label="交換語言">⇄</button>
+    <label>對方語言<select id="langB"></select></label>
+  </div>
+
+  <div class="opts">
+    <label><input id="speak" type="checkbox" checked> 以 Google 語音念出譯文</label>
+    <label><input id="live" type="checkbox" checked> 說話中同步翻譯</label>
+  </div>
+
+  <div id="log" aria-live="polite"><p class="empty">按下方按鈕開始說話，系統會即時辨識並翻譯，再用 Google 語音念出譯文。</p></div>
+  <div id="status"></div>
+
+  <div class="mics">
+    <button id="micA" class="mic" type="button">🎤 我方說話<small id="hintA"></small></button>
+    <button id="micB" class="mic" type="button">🎤 對方說話<small id="hintB"></small></button>
+  </div>
+</div>
+
+<script>
+// 語音辨識：瀏覽器 Web Speech API（Chrome 使用 Google 語音辨識）
+// 翻譯：Google 翻譯公開端點；朗讀：speechSynthesis，優先挑 Google 語音
+const LANGS = [
+  ['zh-TW', 'zh-TW', '中文（台灣）'],
+  ['en-US', 'en', 'English 英文'],
+  ['vi-VN', 'vi', 'Tiếng Việt 越南文'],
+  ['id-ID', 'id', 'Bahasa Indonesia 印尼文'],
+  ['th-TH', 'th', 'ภาษาไทย 泰文'],
+  ['fil-PH', 'tl', 'Filipino 菲律賓文'],
+  ['ja-JP', 'ja', '日本語 日文'],
+  ['ko-KR', 'ko', '한국어 韓文'],
+  ['ms-MY', 'ms', 'Bahasa Melayu 馬來文'],
+  ['zh-CN', 'zh-CN', '中文（简体）'],
+]
+const $ = (id) => document.getElementById(id)
+const langA = $('langA'), langB = $('langB'), log = $('log'), statusEl = $('status')
+
+const store = {
+  get(k, d) { try { return localStorage.getItem('xl.' + k) ?? d } catch { return d } },
+  set(k, v) { try { localStorage.setItem('xl.' + k, v) } catch {} },
+}
+for (const sel of [langA, langB]) for (const [code, , name] of LANGS) sel.add(new Option(name, code))
+langA.value = store.get('a', 'zh-TW')
+langB.value = store.get('b', 'en-US')
+$('speak').checked = store.get('speak', '1') === '1'
+$('live').checked = store.get('live', '1') === '1'
+const sizes = ['1.25rem', '1.6rem', '2rem']
+let sizeIdx = Number(store.get('size', 0)) || 0
+document.documentElement.style.setProperty('--size', sizes[sizeIdx])
+
+const nameOf = (code) => LANGS.find((l) => l[0] === code)[2]
+const gCode = (code) => LANGS.find((l) => l[0] === code)[1]
+function updateHints() {
+  $('hintA').textContent = `${nameOf(langA.value)} → ${nameOf(langB.value)}`
+  $('hintB').textContent = `${nameOf(langB.value)} → ${nameOf(langA.value)}`
+  store.set('a', langA.value); store.set('b', langB.value)
+}
+updateHints()
+langA.onchange = langB.onchange = () => { stop(); updateHints() }
+$('swap').onclick = () => { stop(); [langA.value, langB.value] = [langB.value, langA.value]; updateHints() }
+$('speak').onchange = (e) => store.set('speak', e.target.checked ? '1' : '0')
+$('live').onchange = (e) => store.set('live', e.target.checked ? '1' : '0')
+$('size').onclick = () => { sizeIdx = (sizeIdx + 1) % sizes.length; store.set('size', sizeIdx); document.documentElement.style.setProperty('--size', sizes[sizeIdx]) }
+$('clear').onclick = () => { log.innerHTML = ''; }
+$('copy').onclick = async () => {
+  const text = [...log.querySelectorAll('.msg:not(.live)')].map((m) => `${m.querySelector('.src').textContent}\n${m.querySelector('.dst').textContent}`).join('\n\n')
+  try { await navigator.clipboard.writeText(text); setStatus('已複製對話紀錄') } catch { setStatus('無法複製，請手動選取文字', true) }
+}
+
+function setStatus(text, err = false) { statusEl.textContent = text; statusEl.classList.toggle('err', err) }
+
+// ---- 翻譯 ----
+const cache = new Map()
+async function translate(text, from, to) {
+  const key = `${from}|${to}|${text}`
+  if (cache.has(key)) return cache.get(key)
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=${gCode(from)}&tl=${gCode(to)}&q=${encodeURIComponent(text)}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('翻譯服務回應 ' + res.status)
+  const data = await res.json()
+  const out = (data[0] || []).map((s) => s[0]).join('')
+  cache.set(key, out)
+  return out
+}
+
+// ---- 朗讀 ----
+let voices = []
+const loadVoices = () => { voices = speechSynthesis.getVoices() }
+if ('speechSynthesis' in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices }
+function pickVoice(code) {
+  const base = code.split('-')[0]
+  const match = voices.filter((v) => v.lang.replace('_', '-') === code)
+  const loose = voices.filter((v) => v.lang.toLowerCase().startsWith(base))
+  const all = match.length ? match : loose
+  return all.find((v) => /google/i.test(v.name)) || all[0] || null
+}
+function speak(text, code) {
+  if (!$('speak').checked || !('speechSynthesis' in window) || !text) return
+  const u = new SpeechSynthesisUtterance(text)
+  u.lang = code
+  const v = pickVoice(code)
+  if (v) u.voice = v
+  u.rate = 1
+  // 朗讀時暫停收音，避免把譯文再辨識進來
+  u.onstart = () => { speaking = true; if (rec) try { rec.abort() } catch {} }
+  u.onend = u.onerror = () => { speaking = false; if (active) startRec() }
+  speechSynthesis.speak(u)
+}
+
+// ---- 對話氣泡 ----
+function bubble(side) {
+  log.querySelector('.empty')?.remove()
+  const el = document.createElement('div')
+  el.className = `msg ${side} live`
+  el.innerHTML = '<div class="src"></div><div class="dst"></div><div class="meta"><span></span><button type="button" hidden>再念一次</button></div>'
+  log.appendChild(el)
+  log.scrollTop = log.scrollHeight
+  return el
+}
+
+// ---- 語音辨識 ----
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+let rec = null, active = null, speaking = false, current = null, liveTimer = null, liveSeq = 0
+
+function startRec() {
+  if (!active || speaking) return
+  const from = active === 'a' ? langA.value : langB.value
+  const to = active === 'a' ? langB.value : langA.value
+  rec = new SR()
+  rec.lang = from
+  rec.continuous = true
+  rec.interimResults = true
+  rec.onresult = (e) => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i]
+      const text = r[0].transcript.trim()
+      if (!text) continue
+      if (!current) current = bubble(active)
+      current.querySelector('.src').textContent = text
+      if (r.isFinal) finalize(current, text, from, to)
+      else if ($('live').checked) liveTranslate(current, text, from, to)
+    }
+  }
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { setStatus('麥克風權限被拒，請在瀏覽器網址列允許麥克風', true); stop() }
+    else if (e.error === 'network') setStatus('語音辨識需要網路連線', true)
+  }
+  // Chrome 靜音一陣子會自動結束，持續模式下自動重啟
+  rec.onend = () => { rec = null; if (active && !speaking) setTimeout(startRec, 150) }
+  try { rec.start(); setStatus(`正在聆聽：${nameOf(from)}`) } catch {}
+}
+
+function liveTranslate(el, text, from, to) {
+  clearTimeout(liveTimer)
+  const seq = ++liveSeq
+  liveTimer = setTimeout(async () => {
+    try {
+      const out = await translate(text, from, to)
+      if (seq === liveSeq && el.classList.contains('live')) { el.querySelector('.dst').textContent = out; log.scrollTop = log.scrollHeight }
+    } catch {}
+  }, 250)
+}
+
+async function finalize(el, text, from, to) {
+  clearTimeout(liveTimer); liveSeq++
+  current = null
+  el.classList.remove('live')
+  const dst = el.querySelector('.dst')
+  try {
+    const out = await translate(text, from, to)
+    dst.textContent = out
+    el.querySelector('.meta span').textContent = `${nameOf(from)} → ${nameOf(to)} · ${new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}`
+    const again = el.querySelector('.meta button')
+    again.hidden = false
+    again.onclick = () => speak(out, to)
+    log.scrollTop = log.scrollHeight
+    speak(out, to)
+  } catch (err) {
+    dst.textContent = '（翻譯失敗）'
+    setStatus('翻譯失敗：' + err.message, true)
+  }
+}
+
+function stop() {
+  active = null; current = null
+  if (rec) try { rec.abort() } catch {}
+  rec = null
+  log.querySelectorAll('.msg.live').forEach((m) => m.remove())
+  $('micA').classList.remove('on'); $('micB').classList.remove('on')
+  setStatus('')
+}
+
+function toggle(side) {
+  if (!SR) { setStatus('此瀏覽器不支援語音辨識，請改用 Chrome 或 Edge', true); return }
+  const wasActive = active
+  stop()
+  if (wasActive === side) return
+  if ('speechSynthesis' in window) speechSynthesis.cancel()
+  speaking = false
+  active = side
+  $(side === 'a' ? 'micA' : 'micB').classList.add('on')
+  startRec()
+}
+$('micA').onclick = () => toggle('a')
+$('micB').onclick = () => toggle('b')
+if (!SR) setStatus('此瀏覽器不支援語音辨識，請改用 Chrome 或 Edge', true)
+</script>
+</body>
+</html>
