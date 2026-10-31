@@ -14,21 +14,25 @@ const emit = defineEmits(['new', 'close'])
 const rec = computed(() => store.records.find((r) => r.id === props.record.id) ?? props.record)
 const sheet = ref()
 const file = ref(null)
-const previewUrl = ref('')
 const status = ref('')
 const busy = ref(true)
 const reviewing = ref(false)
 const closing = ref(false)
+const pageImage = ref('') // PDF 整頁圖片，畫面上直接預覽
+const viewing = ref(false)
+const zoomed = ref(false)
+// 嵌在其他頁面中（例如 Claude 預覽網址）時，瀏覽器會擋下載與分享
+const embedded = typeof window !== 'undefined' && window.self !== window.top
+const EMBEDDED_MSG = '此預覽版無法下載或分享檔案，請用正式網址開啟；可先看下方的 PDF 預覽圖'
 
 async function build({ upload = !rec.value.pdfUrl } = {}) {
   busy.value = true
   try {
     await nextTick()
     const { renderA4Pdf } = await import('../lib/pdf.js')
-    const blob = await renderA4Pdf(sheet.value.$el)
+    const { blob, image } = await renderA4Pdf(sheet.value.$el)
+    pageImage.value = image
     file.value = pdfFile(blob, rec.value.reportNo)
-    if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
-    previewUrl.value = URL.createObjectURL(blob)
     if (upload) await attachPdf(rec.value, blob).catch((e) => console.warn('PDF 上傳失敗', e))
   } finally {
     busy.value = false
@@ -42,8 +46,20 @@ const cardData = () => ({
   photoUrl: rec.value.remotePhotos?.[0],
 })
 
+function download() {
+  if (embedded) {
+    status.value = EMBEDDED_MSG
+    return
+  }
+  downloadFile(file.value)
+}
+
 async function share() {
   status.value = ''
+  if (embedded) {
+    status.value = EMBEDDED_MSG
+    return
+  }
   if (canPickTarget()) {
     const sent = await shareFlex(defectFlex(cardData()))
     status.value = sent ? '✅ 已傳送圖文卡片' : ''
@@ -148,11 +164,18 @@ watch(
     <p v-if="status" class="text-center font-semibold text-green-700">{{ status }}</p>
 
     <div class="grid grid-cols-2 gap-3">
-      <a class="btn btn-ghost" :class="{ 'pointer-events-none opacity-40': busy }" :href="previewUrl" target="_blank">👁️ 預覽 PDF</a>
-      <button class="btn btn-ghost" :disabled="busy" @click="downloadFile(file)">⬇️ 下載</button>
+      <button class="btn btn-ghost" :disabled="busy || !pageImage" @click="viewing = true">👁️ 預覽 PDF</button>
+      <button class="btn btn-ghost" :disabled="busy" @click="download">⬇️ 下載</button>
     </div>
     <button v-if="rec.replyUrl && rec.status === 'open'" class="btn btn-ghost w-full text-lg" @click="copyReplyLink">🔗 複製廠商回報連結</button>
     <button v-if="rec.status === 'closed'" class="btn btn-ghost w-full text-lg" :disabled="reviewing" @click="review('open')">重新開啟</button>
+
+    <button v-if="pageImage" class="block w-full rounded-3xl bg-white p-4 text-left shadow" aria-label="放大檢視 PDF" @click="viewing = true">
+      <div class="mb-2 flex items-center justify-between text-sm font-bold text-slate-600">
+        <span>📄 PDF 預覽（與傳出的檔案相同）</span><span class="text-amber-700">點圖放大 ➜</span>
+      </div>
+      <img :src="pageImage" class="w-full rounded-lg border border-slate-200" alt="PDF 預覽" />
+    </button>
 
     <button class="btn btn-primary w-full" @click="emit('new')">➕ 再登錄一筆</button>
     <button class="w-full py-3 text-slate-500" @click="emit('close')">回到紀錄列表</button>
@@ -160,6 +183,24 @@ watch(
     <!-- 離屏渲染 A4 版面供 PDF 擷取 -->
     <div style="position: fixed; left: -10000px; top: 0" aria-hidden="true">
       <ReportSheet ref="sheet" :record="rec" />
+    </div>
+
+    <!-- 全螢幕檢視 PDF 整頁圖片：點圖切換放大，可上下左右捲動 -->
+    <div v-if="viewing" class="fixed inset-0 z-50 flex flex-col bg-slate-900">
+      <div class="flex items-center justify-between px-4 pb-2 pt-[max(env(safe-area-inset-top),12px)] text-white">
+        <span class="font-bold">{{ rec.reportNo }}</span>
+        <button class="rounded-xl bg-slate-700 px-4 py-2 text-lg font-bold" @click="(viewing = false), (zoomed = false)">✕ 關閉</button>
+      </div>
+      <div class="min-h-0 flex-1 overflow-auto p-2 pb-[max(env(safe-area-inset-bottom),12px)]">
+        <img
+          :src="pageImage"
+          class="mx-auto block max-w-none bg-white shadow-lg"
+          :style="{ width: zoomed ? '200%' : '100%', maxWidth: zoomed ? 'none' : '794px' }"
+          alt="PDF 整頁"
+          @click="zoomed = !zoomed"
+        />
+      </div>
+      <p class="bg-slate-900 pb-[max(env(safe-area-inset-bottom),8px)] text-center text-sm text-slate-400">點圖可放大／縮小</p>
     </div>
 
     <AfterPhotoClose v-if="closing" :record="rec" @done="onClosed" @cancel="closing = false" />

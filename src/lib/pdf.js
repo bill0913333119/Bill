@@ -2,7 +2,7 @@ import html2canvas from 'html2canvas-pro'
 import { jsPDF } from 'jspdf'
 
 /**
- * 將 A4 版面的 DOM（794×1123px，即 96dpi 下的 210×297mm）轉為 PDF Blob。
+ * 將 A4 版面的 DOM（794×1123px，即 96dpi 下的 210×297mm）轉為 PDF Blob 與整頁預覽圖。
  * 以瀏覽器排版後點陣化，中文字型無需另外嵌入，任何手機皆可正確顯示。
  */
 export async function renderA4Pdf(el) {
@@ -26,5 +26,6 @@ export async function renderA4Pdf(el) {
     offset += pageH
   } while (offset < imgH - 1)
 
-  return pdf.output('blob')
+  // image：整頁圖片，供畫面上直接預覽（不需下載或開新分頁）
+  return { blob: pdf.output('blob'), image: img }
 }
