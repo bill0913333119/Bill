@@ -1,0 +1,17 @@
+{
+  "name": "english-learning-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "獨立的英文學習 App：點單字顯示音標、中文翻譯並朗讀發音",
+  "main": "index.js",
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-native": "0.76.9",
+    "react-native-tts": "^4.1.1"
+  }
+}
