@@ -2,43 +2,53 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import express from 'express'
 import { defectFlex } from '../../shared/flex.js'
+import { HttpError, requireFields, urlList } from './http.js'
 import { verifySignature } from './line.js'
 import * as repo from './repo.js'
+import { mountSafety } from './safety.js'
 import { ALLOWED_TYPES } from './storage.js'
 
 const IMAGE_TYPES = ALLOWED_TYPES.filter((t) => t.startsWith('image/'))
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message)
-    this.status = status
-  }
-}
-
-function requireFields(body, fields) {
-  const missing = fields.filter((f) => !String(body?.[f] ?? '').trim())
-  if (missing.length) throw new HttpError(400, `缺少欄位：${missing.join(', ')}`)
-}
-
-const urlList = (v, storage, max) => {
-  if (!Array.isArray(v) || v.length > max || !v.every((u) => typeof u === 'string' && storage.owns(u))) {
-    throw new HttpError(400, `照片需為本系統上傳之網址，最多 ${max} 張`)
-  }
-  return v
-}
+const LOCKED_TEXT = '（匿名吹哨內容僅限安衛人員檢視）'
 
 /**
- * @param {object} deps { pool, storage, line, config }
+ * @param {object} deps { pool, storage, line, config, now? }
  */
-export function createApp({ pool, storage, line, config }) {
+export function createApp({ pool, storage, line, config, now = () => new Date() }) {
   const app = express()
   app.disable('x-powered-by')
+  app.set('trust proxy', 1) // Render 等平台經反向代理，限流需取得真實來源 IP
   const dto = (row) => repo.toDto(row, config.publicUrl)
 
+  /**
+   * 角色：safety（安衛／管理者：可審匿名吹哨、解鎖工區管制）、staff（工程師）。
+   * 只設 APP_TOKEN 時工程師即具全部權限；另設 SAFETY_TOKEN 時權限才分開。
+   */
+  function roleOf(req) {
+    const header = req.get('authorization') ?? ''
+    if (config.safetyToken && header === `Bearer ${config.safetyToken}`) return 'safety'
+    const staffRole = config.safetyToken ? 'staff' : 'safety'
+    if (!config.appToken) return staffRole
+    return header === `Bearer ${config.appToken}` ? staffRole : null
+  }
+
   const auth = (req, _res, next) => {
-    if (config.appToken && req.get('authorization') !== `Bearer ${config.appToken}`) throw new HttpError(401, '未授權')
+    req.role = roleOf(req)
+    if (!req.role) throw new HttpError(401, '未授權')
     next()
+  }
+
+  const requireSafety = (req, _res, next) => {
+    if (req.role !== 'safety') throw new HttpError(403, '此功能限安衛人員，請在設定輸入安衛金鑰')
+    next()
+  }
+
+  /** 待審或不成立的匿名吹哨：非安衛人員只看得到案件存在，看不到內容與照片。 */
+  const dtoFor = (req) => (row) => {
+    const d = dto(row)
+    if (req.role === 'safety' || d.source !== 'whistle' || !['pending', 'dismissed'].includes(d.status)) return d
+    return { ...d, description: LOCKED_TEXT, photos: [], reviewNote: '', locked: true }
   }
 
   // 卡片資料：缺失 → LINE Flex
@@ -87,8 +97,15 @@ export function createApp({ pool, storage, line, config }) {
 
   // 前端執行期設定（不需重新 build 即可切換 LIFF）
   app.get('/api/config', (_req, res) => {
-    res.json({ liffId: config.line.liffId, authRequired: Boolean(config.appToken), lineEnabled: line.enabled })
+    res.json({
+      liffId: config.line.liffId,
+      authRequired: Boolean(config.appToken),
+      lineEnabled: line.enabled,
+      safetyRoles: Boolean(config.safetyToken),
+    })
   })
+
+  app.get('/api/me', auth, (req, res) => res.json({ role: req.role }))
 
   app.get('/api/presets', async (_req, res) => res.json(await repo.getPresets(pool)))
 
@@ -101,13 +118,13 @@ export function createApp({ pool, storage, line, config }) {
   })
 
   app.get('/api/defects', auth, async (req, res) => {
-    res.json((await repo.listDefects(pool, req.query)).map(dto))
+    res.json((await repo.listDefects(pool, req.query)).map(dtoFor(req)))
   })
 
   app.get('/api/defects/:id', auth, async (req, res) => {
     const row = await repo.findDefect(pool, 'd.id', req.params.id)
     if (!row) throw new HttpError(404, '找不到缺失')
-    res.json(dto(row))
+    res.json(dtoFor(req)(row))
   })
 
   app.put('/api/defects/:id', auth, async (req, res) => {
@@ -124,6 +141,9 @@ export function createApp({ pool, storage, line, config }) {
     if (!before) throw new HttpError(404, '找不到缺失')
     const { status, reviewNote, pdfUrl, afterPhotos } = req.body ?? {}
     if (status && !['open', 'closed'].includes(status)) throw new HttpError(400, 'status 僅可為 open 或 closed')
+    if (status && ['pending', 'dismissed'].includes(before.status)) {
+      throw new HttpError(409, '此通報尚待工務所審核，請使用派工或判定不成立')
+    }
     if (pdfUrl && !storage.owns(pdfUrl)) throw new HttpError(400, 'pdfUrl 無效')
     // 工程師現場複查：自行拍改善後照片並銷案
     if (afterPhotos !== undefined) {
@@ -131,11 +151,11 @@ export function createApp({ pool, storage, line, config }) {
       urlList(afterPhotos, storage, 3)
       if (!afterPhotos.length) throw new HttpError(400, '請至少 1 張改善後照片')
     }
-    const d = dto(await repo.reviewDefect(pool, before.id, { status, reviewNote, pdfUrl, afterPhotos }, before))
+    const row = await repo.reviewDefect(pool, before.id, { status, reviewNote, pdfUrl, afterPhotos }, before)
     if (before.status === 'replied' && status === 'open') {
-      await notifyGroup(d, { title: '↩️ 缺失改善退回', note: `退回原因：${reviewNote || '未填寫'}` })
+      await notifyGroup(dto(row), { title: '↩️ 缺失改善退回', note: `退回原因：${reviewNote || '未填寫'}` })
     }
-    res.json(d)
+    res.json(dtoFor(req)(row))
   })
 
   // ---------- 每日工作日誌 ----------
@@ -161,7 +181,8 @@ export function createApp({ pool, storage, line, config }) {
   // ---------- 廠商回報（以 reply token 存取，免登入） ----------
   async function byToken(token) {
     const row = await repo.findDefect(pool, 'd.reply_token', token)
-    if (!row) throw new HttpError(404, '連結無效或已失效')
+    // 待審派工或不成立的通報不對外開放
+    if (!row || ['pending', 'dismissed'].includes(row.status)) throw new HttpError(404, '連結無效或已失效')
     return row
   }
 
@@ -190,6 +211,8 @@ export function createApp({ pool, storage, line, config }) {
     res.json(repo.toPublicDto(d))
   })
 
+  mountSafety(app, { pool, storage, line, config, now, auth, requireSafety, dtoFor, notifyGroup, flexFor })
+
   app.use('/api', (_req, _res) => {
     throw new HttpError(404, 'Not found')
   })
@@ -215,7 +238,8 @@ export function createApp({ pool, storage, line, config }) {
     const pgClient = ['23503', '23514', '22P02', '22007', '22008'].includes(err.code)
     const status = err.status ?? err.statusCode ?? (pgClient ? 400 : 500)
     if (status >= 500) console.error(err)
-    res.status(status).json({ error: status >= 500 ? '伺服器錯誤' : pgClient ? '資料格式或關聯錯誤' : err.message })
+    const body = { error: status >= 500 ? '伺服器錯誤' : pgClient ? '資料格式或關聯錯誤' : err.message }
+    res.status(status).json(status < 500 && err.extra ? { ...body, ...err.extra } : body)
   })
 
   return app

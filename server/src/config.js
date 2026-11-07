@@ -9,6 +9,8 @@ export const config = {
   publicUrl: (env.PUBLIC_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${env.PORT ?? 3000}`).replace(/\/$/, ''),
   // 設定後，工程師端 API 需帶 Authorization: Bearer <APP_TOKEN>
   appToken: env.APP_TOKEN || '',
+  // 選填：安衛人員金鑰。設定後，匿名吹哨內容、工區管制解鎖僅限持此金鑰者
+  safetyToken: env.SAFETY_TOKEN || '',
   // 照片儲存：設定 S3_* 時用 S3／R2；STORAGE=db 存資料庫；否則存本機 UPLOAD_DIR
   storage: env.STORAGE || 'local',
   uploadDir: env.UPLOAD_DIR ?? new URL('../uploads/', import.meta.url).pathname,

@@ -15,6 +15,10 @@ const storage = config.s3
 const storageName = config.s3 ? 'S3/R2' : config.storage === 'db' ? '資料庫' : '本機'
 const line = lineClient(config.line)
 
-createApp({ pool, storage, line, config }).listen(config.port, () => {
+const app = createApp({ pool, storage, line, config })
+app.listen(config.port, () => {
   console.log(`工地缺失 API 已啟動：${config.publicUrl}（儲存：${storageName}，LINE：${line.enabled ? '啟用' : '未設定'}）`)
 })
+
+// 每 5 分鐘檢查逾時未改善的缺失並升級通報（免費主機休眠時暫停，喚醒後與開啟工安總覽時會補檢查）
+setInterval(() => app.locals.runEscalation().catch((e) => console.error('逾時升級檢查失敗', e)), 5 * 60_000).unref()
