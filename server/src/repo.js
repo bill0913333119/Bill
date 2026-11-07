@@ -1,15 +1,17 @@
 import { randomBytes } from 'node:crypto'
+import { REPORT_POINTS } from '../../shared/safety.js'
 import { tx } from './db.js'
 
 const SELECT = `
   select d.*, p.name as project_name, p.line_group_id,
-         t.label as trade_label, t.icon as trade_icon, c.name as contractor_name,
+         t.label as trade_label, t.icon as trade_icon, c.name as contractor_name, rw.name as reporter_name,
          coalesce((select json_agg(url order by sort) from defect_photos where defect_id = d.id and kind = 'before'), '[]') as photos,
          coalesce((select json_agg(url order by sort) from defect_photos where defect_id = d.id and kind = 'after'), '[]') as after_photos
     from defects d
     join projects p on p.id = d.project_id
     join trades t on t.id = d.trade_id
-    left join contractors c on c.id = d.contractor_id`
+    left join contractors c on c.id = d.contractor_id
+    left join workers rw on rw.id = d.reporter_worker_id`
 
 export function toDto(row, publicUrl) {
   return {
@@ -39,12 +41,18 @@ export function toDto(row, publicUrl) {
     photos: row.photos,
     afterPhotos: row.after_photos,
     lineGroupId: row.line_group_id ?? null,
+    source: row.source ?? 'engineer',
+    category: row.category ?? '',
+    dueAt: row.due_at,
+    dispatchedAt: row.dispatched_at,
+    escalatedAt: row.escalated_at,
+    reporterName: row.reporter_name ?? '', // 具名通報人：僅工務所可見，不會出現在廠商頁或 PDF
   }
 }
 
 /** 對外（廠商）只揭露改善所需欄位。 */
 export function toPublicDto(dto) {
-  const { lineGroupId, inspector, reviewNote, ...rest } = dto
+  const { lineGroupId, inspector, reviewNote, reporterName, ...rest } = dto
   return { ...rest, reviewNote: dto.status === 'open' ? reviewNote : '' }
 }
 
@@ -80,9 +88,18 @@ export async function listDefects(db, { project, status, limit = 200 }) {
   return rows
 }
 
+/** 尚未銷案的缺失（待審派工、待改善、待複查），依期限排序。 */
+export async function activeDefects(db, projectId) {
+  const { rows } = await db.query(
+    `${SELECT} where d.project_id = $1 and d.status in ('pending', 'open', 'replied') order by d.due_at nulls last, d.created_at`,
+    [projectId],
+  )
+  return rows
+}
+
 const TZ_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' })
 
-async function assignReportNo(client, requested, createdAt) {
+export async function assignReportNo(client, requested, createdAt) {
   const prefix = `DF-${TZ_DATE.format(createdAt).replaceAll('-', '')}-`
   if (requested?.startsWith(prefix)) {
     const { rowCount } = await client.query('select 1 from defects where report_no = $1', [requested])
@@ -96,7 +113,7 @@ async function assignReportNo(client, requested, createdAt) {
   return `${prefix}${String(rows[0].n).padStart(3, '0')}`
 }
 
-async function replacePhotos(client, defectId, kind, urls) {
+export async function replacePhotos(client, defectId, kind, urls) {
   await client.query('delete from defect_photos where defect_id = $1 and kind = $2', [defectId, kind])
   for (const [i, url] of urls.entries()) {
     await client.query('insert into defect_photos (defect_id, kind, url, sort) values ($1, $2, $3, $4)', [defectId, kind, url, i])
@@ -122,7 +139,8 @@ export async function upsertDefect(pool, id, d) {
       await client.query(
         `update defects set project_id = $2, building = $3, floor = $4, trade_id = $5, item = $6, description = $7,
                 severity = $8, contractor_id = $9, due_date = $10, inspector_name = $11, unit = $12,
-                pdf_url = coalesce($13, pdf_url)
+                pdf_url = coalesce($13, pdf_url),
+                due_at = case when source = 'engineer' then ($10::date + time '17:00') at time zone 'Asia/Taipei' else due_at end
           where id = $1`,
         [id, ...fields, d.pdfUrl || null],
       )
@@ -131,8 +149,9 @@ export async function upsertDefect(pool, id, d) {
       const reportNo = await assignReportNo(client, d.reportNo, createdAt)
       await client.query(
         `insert into defects (id, project_id, building, floor, trade_id, item, description, severity, contractor_id,
-                              due_date, inspector_name, unit, pdf_url, report_no, reply_token, created_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+                              due_date, inspector_name, unit, pdf_url, report_no, reply_token, created_at, due_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                 ($10::date + time '17:00') at time zone 'Asia/Taipei')`,
         [id, ...fields, d.pdfUrl || null, reportNo, randomBytes(18).toString('base64url'), createdAt],
       )
       await client.query("insert into defect_logs (defect_id, action, actor) values ($1, 'created', $2)", [id, d.inspector || null])
@@ -170,6 +189,14 @@ export async function reviewDefect(pool, defectId, { status, reviewNote, pdfUrl,
       await client.query('insert into defect_logs (defect_id, action, actor, note) values ($1, $2, $3, $4)', [
         defectId, action, 'engineer', reviewNote || null,
       ])
+      // 具名通報屬實並完成改善：發給通報人工安點數（同一件只發一次）
+      if (status === 'closed' && before.source === 'worker' && before.reporter_worker_id) {
+        await client.query(
+          `insert into safety_points (worker_id, defect_id, points, reason) values ($1, $2, $3, 'report_closed')
+           on conflict do nothing`,
+          [before.reporter_worker_id, defectId, REPORT_POINTS[before.severity] ?? REPORT_POINTS.normal],
+        )
+      }
     }
     return findDefect(client, 'd.id', defectId)
   })
