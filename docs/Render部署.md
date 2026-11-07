@@ -16,6 +16,8 @@
 5. 點 `site-defect`，左上角的 `https://….onrender.com` 就是你的網址。
 6. 同一頁 **Environment** → `APP_TOKEN` 旁的眼睛圖示 → 複製。
 7. 手機打開網址 → **⚙️ 設定**：填工程師姓名、預設專案，「雲端連線金鑰」貼上 `APP_TOKEN`，顯示「☁️ 已連線雲端」即成功。
+   - 安衛人員改貼 `SAFETY_TOKEN`（可審匿名吹哨、解鎖工區管制）。工人不需要金鑰，掃工地 QR 即可，見 `docs/工安報到與吹哨導入說明.md`。
+   - 已經部署過的服務：若 **Environment** 裡沒有 `SAFETY_TOKEN`，可自行新增一個（值填一串夠長的隨機英數字）。沒有設定時，工程師金鑰具全部權限。
 8. 加到主畫面：Android Chrome「⋮ → 加到主畫面」；iPhone Safari「分享 → 加入主畫面」。
 9. 照 `docs/真機測試清單.md` 用 Android 與 iPhone 各測一次。
 

@@ -22,7 +22,8 @@ export const store = reactive({
     reminderHour: 17,
   },
   presets: { trades: TRADES, contractors: CONTRACTORS, projects: PROJECTS },
-  server: { available: false, authRequired: false, liffId: '', error: '' },
+  // role：safety（安衛／管理者）或 staff（工程師）；safetyRoles 表示伺服器有另設安衛金鑰
+  server: { available: false, authRequired: false, liffId: '', error: '', role: null, safetyRoles: false },
   draft: createDraft(),
   step: 1,
   records: [],
@@ -84,10 +85,19 @@ export async function initStore() {
 export async function connect() {
   try {
     const cfg = await api.getConfig()
-    store.server = { available: true, authRequired: cfg.authRequired, liffId: cfg.liffId, error: '' }
+    store.server = {
+      available: true,
+      authRequired: cfg.authRequired,
+      liffId: cfg.liffId,
+      error: '',
+      role: null,
+      safetyRoles: Boolean(cfg.safetyRoles),
+    }
     if (cfg.liffId) initLiff(cfg.liffId)
     store.presets = await api.getPresets()
     db.savePresets(store.presets)
+    store.server.role = (await api.getMe()).role
+    await syncZones()
     await syncPending()
     await refreshRecords()
   } catch (e) {
@@ -122,7 +132,10 @@ export async function syncRecord(record) {
 }
 
 const CLOSE_FIELDS = ['status', 'afterPhotos', 'reviewNote', 'closedAt']
-const SERVER_FIELDS = ['reportNo', 'status', 'replyUrl', 'replyNote', 'repliedAt', 'reviewNote', 'afterPhotos', 'closedAt', 'pdfUrl']
+const SERVER_FIELDS = [
+  'reportNo', 'status', 'replyUrl', 'replyNote', 'repliedAt', 'reviewNote', 'afterPhotos', 'closedAt', 'pdfUrl',
+  'source', 'dueAt', 'escalatedAt', 'dispatchedAt', 'contractorId', 'severity', 'dueDate',
+]
 const pickServerFields = (d) => Object.fromEntries(SERVER_FIELDS.map((k) => [k, d[k]]))
 
 export async function syncPending() {
@@ -142,14 +155,23 @@ export async function refreshRecords() {
   const project = store.settings.projectName
   if (!store.server.available || !project) return
   const remote = await api.listDefects(project)
-  for (const d of remote) {
-    const local = store.records.find((r) => r.id === d.id)
-    if (!local) await saveLocal({ ...d, remotePhotos: d.photos, synced: true })
-    else if (local.closePending) continue
-    else if (SERVER_FIELDS.some((k) => JSON.stringify(local[k]) !== JSON.stringify(d[k]))) {
-      await saveLocal({ ...local, ...pickServerFields(d) })
-    }
-  }
+  for (const d of remote) await adoptServerRecord(d)
+}
+
+/**
+ * 把伺服器上的缺失存進本機紀錄。工人通報與匿名吹哨的內容由伺服器維護（派工會改責任工班、等級與期限），整筆更新；
+ * 工程師自己開的單只更新伺服器欄位，保留手機上的原始照片。
+ */
+export async function adoptServerRecord(d) {
+  const local = store.records.find((r) => r.id === d.id)
+  if (local?.closePending) return local
+  if (!local) return saveLocal({ ...d, locked: Boolean(d.locked), remotePhotos: d.photos, synced: true })
+  const next =
+    d.source !== 'engineer'
+      ? { ...local, ...d, locked: Boolean(d.locked), remotePhotos: d.photos }
+      : { ...local, ...pickServerFields(d) }
+  if (JSON.stringify(next) === JSON.stringify(local)) return local
+  return saveLocal(next)
 }
 
 /** 正式建檔：配發單號、記住案名、寫入紀錄並清除草稿；有網路時立即同步取得正式單號。 */
@@ -238,12 +260,34 @@ export const pendingCount = () =>
   store.records.filter((r) => !r.synced || r.closePending).length +
   store.logs.filter((l) => l.submittedAt && !l.synced).length
 
-// ---------- 棟別／樓層清單編輯 ----------
+// ---------- 棟別／樓層清單編輯（與伺服器同步，工人報到時用同一份清單） ----------
 export function setBuildings(list) {
   store.settings.buildings = [...new Set(list.map((b) => b.trim()).filter(Boolean))]
+  pushZones()
 }
 export function setFloors(list) {
   store.settings.floors = sortFloors(list.map((f) => f.trim()).filter(Boolean))
+  pushZones()
+}
+
+function pushZones() {
+  const project = store.settings.projectName
+  if (store.server.available && project) {
+    api.putZones(project, store.settings.buildings, store.settings.floors).catch((e) => console.warn('工區清單同步失敗', e))
+  }
+}
+
+/** 連線時：伺服器已有本專案工區清單就採用；沒有就上傳手機上的清單。 */
+async function syncZones() {
+  const project = store.settings.projectName
+  if (!project) return
+  const z = await api.getZones(project)
+  if (z.floors?.length) {
+    store.settings.floors = z.floors
+    if (z.buildings) store.settings.buildings = z.buildings
+  } else {
+    await api.putZones(project, store.settings.buildings, store.settings.floors)
+  }
 }
 
 /**

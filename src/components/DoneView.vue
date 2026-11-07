@@ -1,10 +1,12 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { defectFlex } from '../../shared/flex.js'
+import { SLA, SOURCE_LABELS, categoryById, remainingText, siteTime } from '../../shared/safety.js'
 import { canPickTarget, shareFlex } from '../lib/liff.js'
 import { downloadFile, pdfFile, shareMessage, shareToLine } from '../lib/share.js'
 import { attachPdf, closeWithPhotos, contractorOf, setStatus, store, tradeLabelOf } from '../store.js'
 import AfterPhotoClose from './AfterPhotoClose.vue'
+import DispatchPanel from './DispatchPanel.vue'
 import ReportSheet from './ReportSheet.vue'
 
 const props = defineProps({ record: { type: Object, required: true } })
@@ -24,6 +26,10 @@ const zoomed = ref(false)
 // 嵌在其他頁面中（例如 Claude 預覽網址）時，瀏覽器會擋下載與分享
 const embedded = typeof window !== 'undefined' && window.self !== window.top
 const EMBEDDED_MSG = '此預覽版無法下載或分享檔案，請用正式網址開啟；可先看下方的 PDF 預覽圖'
+// 現場人員通報／匿名吹哨：期限為時：分（A 級 2 小時、B 級當日收工）
+const fromSite = computed(() => Boolean(rec.value.source && rec.value.source !== 'engineer'))
+const shareable = computed(() => !['pending', 'dismissed'].includes(rec.value.status) && !rec.value.locked)
+const TITLES = { pending: '待審派工', dismissed: '通報不成立', closed: '已銷案', replied: '廠商已回報，待複查' }
 
 async function build({ upload = !rec.value.pdfUrl } = {}) {
   busy.value = true
@@ -119,15 +125,34 @@ watch(
 <template>
   <section class="space-y-4">
     <div class="rounded-3xl bg-white p-6 text-center shadow">
-      <div class="text-6xl">{{ busy ? '⏳' : rec.status === 'closed' ? '🏁' : rec.status === 'replied' ? '🔍' : '✅' }}</div>
+      <div class="text-6xl">
+        {{ busy ? '⏳' : { closed: '🏁', replied: '🔍', pending: '📋', dismissed: '🚫' }[rec.status] ?? '✅' }}
+      </div>
       <h2 class="mt-2 text-2xl font-extrabold">
-        {{ busy ? '正在產出 PDF…' : rec.status === 'closed' ? '已銷案' : rec.status === 'replied' ? '廠商已回報，待複查' : '缺失單已建立' }}
+        {{ busy ? '正在產出 PDF…' : TITLES[rec.status] ?? (fromSite ? '已派工，待改善' : '缺失單已建立') }}
       </h2>
       <p class="mt-1 text-lg text-slate-600">{{ rec.reportNo }}</p>
+      <div v-if="fromSite" class="mt-3 space-y-1 rounded-2xl bg-slate-50 p-3 text-left text-sm">
+        <div>
+          <span class="rounded px-1.5 font-bold text-white" :class="rec.source === 'whistle' ? 'bg-violet-700' : 'bg-sky-600'">
+            {{ rec.source === 'whistle' ? '🕵️' : '👷' }} {{ SOURCE_LABELS[rec.source] }}
+          </span>
+          <span class="ml-1">{{ categoryById(rec.category)?.icon }} {{ rec.item }}・{{ SLA[rec.severity].label }}</span>
+        </div>
+        <div v-if="rec.reporterName">通報人：{{ rec.reporterName }}（僅工務所可見）</div>
+        <div>通報時間：{{ siteTime(rec.createdAt) }}</div>
+        <div v-if="['open', 'pending'].includes(rec.status)" :class="remainingText(rec.dueAt).overdue ? 'font-bold text-red-600' : ''">
+          改善期限：{{ siteTime(rec.dueAt) }}（{{ remainingText(rec.dueAt).text }}）{{ rec.escalatedAt ? '・⚠️ 已升級通報' : '' }}
+        </div>
+        <div v-if="rec.locked" class="font-semibold text-violet-800">🔒 匿名吹哨內容僅限安衛人員檢視</div>
+      </div>
       <p class="mt-1 text-sm" :class="rec.synced ? 'text-green-700' : 'text-amber-700'">
         {{ rec.synced ? '☁️ 已同步至雲端' : '📴 尚未同步（恢復連線後自動上傳）' }}
       </p>
     </div>
+
+    <DispatchPanel v-if="rec.status === 'pending'" :record="rec" />
+    <p v-if="rec.status === 'dismissed'" class="rounded-2xl bg-slate-100 p-4 text-slate-700">🚫 已判定通報不成立：{{ rec.reviewNote || '未填寫原因' }}</p>
 
     <!-- 複查：廠商回報後，工程師檢視改善照片並結案或退回 -->
     <div v-if="rec.status === 'replied'" class="space-y-3 rounded-3xl bg-white p-5 shadow ring-2 ring-sky-300">
@@ -158,19 +183,19 @@ watch(
       <span class="text-3xl">📷</span>改善後拍照銷案
     </button>
 
-    <button class="btn btn-line w-full min-h-20 text-2xl" :disabled="busy" @click="share">
+    <button v-if="shareable" class="btn btn-line w-full min-h-20 text-2xl" :disabled="busy" @click="share">
       <span class="text-3xl">💬</span>{{ rec.status === 'closed' ? '分享銷案單至 LINE' : '產出並分享至 LINE' }}
     </button>
     <p v-if="status" class="text-center font-semibold text-green-700">{{ status }}</p>
 
-    <div class="grid grid-cols-2 gap-3">
+    <div v-if="!rec.locked" class="grid grid-cols-2 gap-3">
       <button class="btn btn-ghost" :disabled="busy || !pageImage" @click="viewing = true">👁️ 預覽 PDF</button>
       <button class="btn btn-ghost" :disabled="busy" @click="download">⬇️ 下載</button>
     </div>
     <button v-if="rec.replyUrl && rec.status === 'open'" class="btn btn-ghost w-full text-lg" @click="copyReplyLink">🔗 複製廠商回報連結</button>
     <button v-if="rec.status === 'closed'" class="btn btn-ghost w-full text-lg" :disabled="reviewing" @click="review('open')">重新開啟</button>
 
-    <button v-if="pageImage" class="block w-full rounded-3xl bg-white p-4 text-left shadow" aria-label="放大檢視 PDF" @click="viewing = true">
+    <button v-if="pageImage && !rec.locked" class="block w-full rounded-3xl bg-white p-4 text-left shadow" aria-label="放大檢視 PDF" @click="viewing = true">
       <div class="mb-2 flex items-center justify-between text-sm font-bold text-slate-600">
         <span>📄 PDF 預覽（與傳出的檔案相同）</span><span class="text-amber-700">點圖放大 ➜</span>
       </div>

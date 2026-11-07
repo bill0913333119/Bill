@@ -26,6 +26,9 @@ services:
       # 工程師 App 連線金鑰：Render 自動產生，到 Environment 頁複製後在 App「設定」輸入
       - key: APP_TOKEN
         generateValue: true
+      # 安衛人員金鑰：可審匿名吹哨內容、解鎖工區管制。只給安衛人員，在 App「設定」輸入
+      - key: SAFETY_TOKEN
+        generateValue: true
       # 綁定自有網域時再填，例：https://defect.example.com；留空則使用 onrender.com 網址
       - key: PUBLIC_URL
         sync: false

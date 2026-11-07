@@ -446,6 +446,13 @@ export function mountSafety(app, { pool, storage, line, config, now, auth, requi
     res.json(dtoFor(req)(row))
   })
 
+  /** 派工時參考：某位置今日在場的工班。 */
+  app.get('/api/safety/crews', auth, async (req, res) => {
+    const p = await staffProject(req)
+    const crews = srepo.crewsAt(await srepo.checkinsOn(pool, p.id, today()), { building: str(req.query.building, 20), floor: str(req.query.floor, 20) })
+    res.json(crews.map(({ contractorId, contractorName, count, leaders }) => ({ contractorId, contractorName, count, leaders: leaders.map((l) => l.name) })))
+  })
+
   app.get('/api/defects/:id/notified', auth, async (req, res) => {
     res.json(await srepo.notifiedFor(pool, req.params.id))
   })

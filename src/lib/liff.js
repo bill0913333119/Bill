@@ -21,3 +21,13 @@ export async function shareFlex(message) {
   const res = await liff.shareTargetPicker([message], { isMultiple: true })
   return Boolean(res)
 }
+
+/** 在 LINE 內開啟時取得使用者 ID（用於派工時個人推播）；不在 LINE 內或失敗回傳 null。 */
+export async function lineUserId() {
+  try {
+    if (!liff?.isInClient?.() || !liff.isLoggedIn()) return null
+    return (await liff.getProfile()).userId
+  } catch {
+    return null
+  }
+}

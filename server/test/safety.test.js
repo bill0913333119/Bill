@@ -180,6 +180,11 @@ describe.skipIf(!DB_URL)('worker check-in, whistleblowing and closed-loop remedi
   it('queues an ambiguous report for the site office, which dispatches it', async () => {
     const r = await report(tokens.wang, { categoryId: 'fall', severity: 'normal', building: 'A棟', floor: '3F' })
     expect(r).toMatchObject({ status: 'pending', notified: [] })
+    const present = (await request(app).get('/api/safety/crews').query({ project: PROJECT, building: 'A棟', floor: '3F' }).set(staff).expect(200)).body
+    expect(present.map((c) => [c.contractorId, c.count, c.leaders])).toEqual([
+      ['c2', 2, ['李班長']],
+      ['c3', 1, ['陳水電']],
+    ])
     const pending = (await request(app).get('/api/safety/overview').query({ project: PROJECT }).set(staff)).body.pending
     const item = pending.find((p) => p.reportNo === r.reportNo)
     expect(item.source).toBe('worker')

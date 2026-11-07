@@ -2,6 +2,7 @@
 // A4「工程缺失改善通知單」版面（794×1123px = 210×297mm @96dpi），供 PDF 點陣化輸出。
 // 左欄為缺失現況（含紅圈標記），右欄為改善後對照框，廠商回報後自動填入改善照片。
 import { computed } from 'vue'
+import { SLA, SOURCE_LABELS, siteTime } from '../../shared/safety.js'
 import { formatDateTime, locationOf } from '../lib/defect.js'
 import { contractorOf, store, tradeLabelOf } from '../store.js'
 
@@ -13,7 +14,11 @@ const rows = computed(() => {
   return Array.from({ length: n }, (_, i) => ({ before: r.value.photos[i], after: r.value.afterPhotos?.[i] }))
 })
 const signature = computed(() => r.value.signature || store.settings.signature)
-const inspector = computed(() => r.value.inspector || store.settings.inspector)
+// 現場人員通報／匿名吹哨：通知單上只標來源，不印通報人；由受理工程師簽核
+const fromSite = computed(() => Boolean(r.value.source && r.value.source !== 'engineer'))
+const inspector = computed(() => (fromSite.value ? SOURCE_LABELS[r.value.source] : r.value.inspector || store.settings.inspector))
+const due = computed(() => (fromSite.value && r.value.dueAt ? siteTime(r.value.dueAt) : r.value.dueDate))
+const sevText = computed(() => (fromSite.value ? SLA[r.value.severity].label : major.value ? '重大缺失' : '一般缺失'))
 </script>
 
 <template>
@@ -26,7 +31,7 @@ const inspector = computed(() => r.value.inspector || store.settings.inspector)
       <div class="no">
         <div>單號：{{ r.reportNo }}</div>
         <div>開單：{{ formatDateTime(r.createdAt) }}</div>
-        <div class="sev" :class="major ? 'major' : 'normal'">{{ major ? '● 重大缺失' : '● 一般缺失' }}</div>
+        <div class="sev" :class="major ? 'major' : 'normal'">● {{ sevText }}</div>
       </div>
     </header>
 
@@ -40,8 +45,8 @@ const inspector = computed(() => r.value.inspector || store.settings.inspector)
         <th>責任廠商</th><td>{{ contractorOf(r.contractorId)?.name }}</td>
       </tr>
       <tr>
-        <th>限期改善</th><td class="due">{{ r.dueDate }}</td>
-        <th>開單人員</th><td>{{ inspector || '—' }}</td>
+        <th>限期改善</th><td class="due">{{ due }}</td>
+        <th>{{ fromSite ? '通報來源' : '開單人員' }}</th><td>{{ inspector || '—' }}</td>
       </tr>
       <tr>
         <th>詳細說明</th><td colspan="3" class="desc">{{ r.description || '（無）' }}</td>
@@ -72,11 +77,11 @@ const inspector = computed(() => r.value.inspector || store.settings.inspector)
     </div>
 
     <table class="sign">
-      <tr><th>開單工程師</th><th>工地主任</th><th>責任廠商簽認</th><th>複查確認</th></tr>
+      <tr><th>{{ fromSite ? '受理工程師' : '開單工程師' }}</th><th>工地主任</th><th>責任廠商簽認</th><th>複查確認</th></tr>
       <tr>
         <td>
           <img v-if="signature" :src="signature" class="sig" alt="簽名" />
-          <div class="sig-name">{{ inspector }}</div>
+          <div class="sig-name">{{ fromSite ? store.settings.inspector : inspector }}</div>
         </td>
         <td></td><td></td><td></td>
       </tr>

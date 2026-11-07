@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { validateStep } from './lib/defect.js'
 import { needsReminder } from './lib/worklog.js'
 import { commitDraft, connect, currentLog, initStore, pendingCount, resetDraft, store } from './store.js'
@@ -12,15 +12,21 @@ import ReplyView from './components/ReplyView.vue'
 import SignaturePad from './components/SignaturePad.vue'
 import WorkLogView from './components/WorkLogView.vue'
 
+// 工人端（掃工地 QR 開啟）與工安中心另外載入，不增加工程師端的開啟時間
+const WorkerApp = defineAsyncComponent(() => import('./worker/WorkerApp.vue'))
+const SafetyView = defineAsyncComponent(() => import('./components/SafetyView.vue'))
+
 const STEPS = [
   { n: 1, title: '拍照', icon: '📷', comp: StepPhotos },
   { n: 2, title: '位置分類', icon: '📍', comp: StepClassify },
   { n: 3, title: '說明指派', icon: '📝', comp: StepAssign },
 ]
 
-// 路由：#/reply/<token> 為廠商回報頁（獨立、免登入）；#/records 由 LINE 選單直達紀錄
+// 路由：#/reply/<token> 為廠商回報頁、#/site/<金鑰> 為工人進場報到（皆獨立、免工程師金鑰）；
+// #/records 由 LINE 選單直達紀錄
 const replyToken = location.hash.match(/^#\/reply\/([\w-]+)/)?.[1] ?? ''
-const view = ref(location.hash === '#/records' ? 'records' : 'wizard') // wizard | done | records | worklog | settings
+const siteKey = location.hash.match(/^#\/site\/([\w-]+)/)?.[1] ?? ''
+const view = ref(location.hash === '#/records' ? 'records' : 'wizard') // wizard | done | records | safety | worklog | settings
 const doneRecord = ref(null)
 const missing = ref([])
 const signing = ref('') // '' | 'finish' | 'settings'
@@ -28,13 +34,16 @@ const now = ref(new Date())
 let tick
 
 const current = computed(() => STEPS[store.step - 1])
-const openCount = computed(() => store.records.filter((r) => r.status !== 'closed').length)
+const openCount = computed(() => store.records.filter((r) => ['open', 'replied'].includes(r.status)).length)
+const reviewCount = computed(
+  () => store.records.filter((r) => r.status === 'pending' && r.projectName === store.settings.projectName).length,
+)
 const pending = computed(() => (store.ready ? pendingCount() : 0))
 const logReminder = computed(() => store.ready && needsReminder(currentLog(), now.value, store.settings.reminderHour))
 const logNotDone = computed(() => !currentLog()?.submittedAt)
 
 onMounted(() => {
-  if (replyToken) return
+  if (replyToken || siteKey) return
   initStore()
   tick = setInterval(() => (now.value = new Date()), 60_000)
 })
@@ -93,6 +102,7 @@ const navBtn = (v) => (view.value === v ? 'bg-amber-100 text-amber-900' : 'text-
 
 <template>
   <ReplyView v-if="replyToken" :token="replyToken" />
+  <WorkerApp v-else-if="siteKey" :site-key="siteKey" />
   <div v-else-if="store.ready" class="mx-auto flex min-h-dvh max-w-xl flex-col">
     <header class="sticky top-0 z-10 bg-slate-900 px-4 pb-3 pt-[max(env(safe-area-inset-top),12px)] text-white">
       <div class="flex items-center justify-between gap-2">
@@ -139,6 +149,8 @@ const navBtn = (v) => (view.value === v ? 'bg-amber-100 text-amber-900' : 'text-
 
       <RecordList v-else-if="view === 'records'" @open="openRecord" />
 
+      <SafetyView v-else-if="view === 'safety'" @open="openRecord" @settings="view = 'settings'" />
+
       <WorkLogView v-else-if="view === 'worklog'" @settings="view = 'settings'" />
 
       <section v-else-if="view === 'settings'" class="space-y-5">
@@ -174,9 +186,13 @@ const navBtn = (v) => (view.value === v ? 'bg-amber-100 text-amber-900' : 'text-
           </select>
         </div>
 
-        <div v-if="store.server.authRequired || store.settings.apiToken">
+        <div v-if="store.server.authRequired || store.server.safetyRoles || store.settings.apiToken">
           <label class="label" for="tok">雲端連線金鑰</label>
           <input id="tok" v-model.trim="store.settings.apiToken" type="password" class="input" placeholder="向系統管理員索取" />
+          <p v-if="store.server.role" class="mt-1 text-sm text-slate-500">
+            目前身分：{{ store.server.role === 'safety' ? '安衛人員（可審匿名吹哨、解鎖工區管制）' : '工程師' }}
+            <template v-if="store.server.safetyRoles && store.server.role !== 'safety'">；安衛人員請改輸入安衛金鑰</template>
+          </p>
         </div>
         <p class="text-sm text-slate-500">
           {{ store.server.available ? '☁️ 已連線雲端，資料會自動同步' : '📴 目前為離線模式，資料存在本機，連線後自動上傳' }}
@@ -195,13 +211,16 @@ const navBtn = (v) => (view.value === v ? 'bg-amber-100 text-amber-900' : 'text-
             {{ store.step < 3 ? '下一步 ➜' : '✅ 完成並產出 PDF' }}
           </button>
         </div>
-        <div class="mt-2 grid grid-cols-3 gap-2 text-sm font-semibold">
-          <button class="rounded-xl py-2" :class="navBtn('wizard')" @click="view = 'wizard'">➕ 新增缺失</button>
+        <div class="mt-2 grid grid-cols-4 gap-1 text-sm font-semibold">
+          <button class="rounded-xl py-2" :class="navBtn('wizard')" @click="view = 'wizard'">➕ 新增</button>
           <button class="rounded-xl py-2" :class="navBtn('records')" @click="view = 'records'">
-            📋 紀錄 <span v-if="openCount" class="ml-1 rounded-full bg-red-500 px-2 text-white">{{ openCount }}</span>
+            📋 紀錄 <span v-if="openCount" class="rounded-full bg-red-500 px-1.5 text-white">{{ openCount }}</span>
+          </button>
+          <button class="rounded-xl py-2" :class="navBtn('safety')" @click="view = 'safety'">
+            🦺 工安 <span v-if="reviewCount" class="rounded-full bg-amber-500 px-1.5 text-slate-900">{{ reviewCount }}</span>
           </button>
           <button class="rounded-xl py-2" :class="navBtn('worklog')" @click="view = 'worklog'">
-            📒 日誌 <span v-if="logNotDone" class="ml-1 inline-block h-2.5 w-2.5 rounded-full" :class="logReminder ? 'bg-red-500' : 'bg-amber-400'"></span>
+            📒 日誌 <span v-if="logNotDone" class="inline-block h-2.5 w-2.5 rounded-full" :class="logReminder ? 'bg-red-500' : 'bg-amber-400'"></span>
           </button>
         </div>
       </div>
